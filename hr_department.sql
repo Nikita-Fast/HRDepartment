@@ -8,75 +8,78 @@ GO
 
 USE hr_department
 
--- Создаем таблицы
---create table department(
---    department_id integer CONSTRAINT department_pk PRIMARY KEY,
---    name varchar(50) not null
---);
+ --Создаем таблицы
+create table department(
+    department_id integer CONSTRAINT department_pk PRIMARY KEY,
+    name varchar(50) not null
+);
 
---create table speciality(
---    speciality_id integer CONSTRAINT speciality_pk PRIMARY KEY,
---    name varchar(50) not null,
---	salary integer not null
---);
+create table speciality(
+    speciality_id integer CONSTRAINT speciality_pk PRIMARY KEY,
+    name varchar(50) not null,
+	salary integer not null
+);
 
---create table employee(
---    employee_id integer CONSTRAINT employee_pk PRIMARY KEY,
---    full_name varchar(50) not null,
---	main_speciality integer not null,
---	expirience integer not null,
---	education varchar(100) not null
---);
+create table employee(
+    employee_id integer CONSTRAINT employee_pk PRIMARY KEY,
+    full_name varchar(50) not null,
+	main_speciality integer not null,
+	hire_date date not null,
+	expirience integer not null,
+	education varchar(100) not null
+);
 
---create table timetable(
---    department_id integer not null,
---    speciality_id integer not null,
---    employee_id   integer null
---);
+create table timetable(
+    department_id integer not null,
+    speciality_id integer not null,
+    employee_id   integer null
+);
 
---create table course(
---    course_id integer CONSTRAINT course_pk PRIMARY KEY,
---    name varchar(100)  not null
---);
+create table course(
+    course_id integer CONSTRAINT course_pk PRIMARY KEY,
+    name varchar(100)  not null
+);
 
---create table emp_course(
---    employee_id integer not null,
---    course_id integer not null,
---);
+create table emp_course(
+    employee_id integer not null,
+    course_id integer not null,
+	pass_date Date not null
+);
 
--- Добавляем внешние ключи
---alter table employee add constraint FK_employee_speciality
---	FOREIGN KEY (main_speciality)
---	REFERENCES speciality(speciality_id)
---;
+ --Добавляем внешние ключи
+alter table employee add constraint FK_employee_speciality
+	FOREIGN KEY (main_speciality)
+	REFERENCES speciality(speciality_id)
+;
 
---alter table timetable add constraint FK_timetable_department
---    FOREIGN KEY (department_id)
---    REFERENCES department(department_id)
---;
+alter table timetable add constraint FK_timetable_department
+    FOREIGN KEY (department_id)
+    REFERENCES department(department_id)
+;
 
---alter table timetable add constraint FK_timetable_speciality
---    FOREIGN KEY (speciality_id)
---    REFERENCES speciality(speciality_id)
---;
+alter table timetable add constraint FK_timetable_speciality
+    FOREIGN KEY (speciality_id)
+    REFERENCES speciality(speciality_id)
+;
 
---alter table timetable add constraint FK_timetable_employee
---    FOREIGN KEY (employee_id)
---    REFERENCES employee(employee_id)
---;
+alter table timetable add constraint FK_timetable_employee
+    FOREIGN KEY (employee_id)
+    REFERENCES employee(employee_id)
+;
 
---alter table emp_course add constraint FK_emp_course_employee
---   FOREIGN KEY (employee_id)
---    REFERENCES employee(employee_id)
---;
+alter table emp_course add constraint FK_emp_course_employee
+   FOREIGN KEY (employee_id)
+    REFERENCES employee(employee_id)
+;
 
---alter table emp_course add constraint FK_emp_course_course
---   FOREIGN KEY (course_id)
---    REFERENCES course(course_id)
---;
+alter table emp_course add constraint FK_emp_course_course
+   FOREIGN KEY (course_id)
+    REFERENCES course(course_id)
+;
 
 GO
 
+-- ПРОЦЕДУРЫ
 GO
 -- курсы могут иметь одинаковые имена, ведь name не является PK
 CREATE PROCEDURE add_course
@@ -86,14 +89,11 @@ BEGIN
 	SELECT @new_course_id=MAX(course_id) FROM course;
 	if @new_course_id is not null
 		begin
-			INSERT INTO course(course_id, name) VALUES(@new_course_id, @name);
+			INSERT INTO course(course_id, name) VALUES(@new_course_id + 1, @name);
 		end
 	else
 		INSERT INTO course(course_id, name) VALUES(1, @name);
 END;
-
---exec add_course 'Основы финансовой грамотности';
---select * from course;
 GO
 
 GO
@@ -105,120 +105,136 @@ BEGIN
 	SELECT @new_speciality_id=MAX(speciality_id) FROM speciality;
 	if @new_speciality_id is not null
 		begin
-			INSERT INTO speciality(speciality_id, name, salary) VALUES(@new_speciality_id, @name, @salary);
+			INSERT INTO speciality(speciality_id, name, salary) VALUES(@new_speciality_id + 1, @name, @salary);
 		end
 	else
 		INSERT INTO speciality(speciality_id, name, salary) VALUES(1, @name, @salary);
 END;
-
---EXEC add_speciality @name='Тестировщик UI', @salary=45000;
-SELECT * FROM speciality;
 GO
 
 GO
---вообще добавление нового отдела означает перечисление должностей этого отдела и указание
---человеко-единиц, требуемых на каждую должность. Соответствующее число строк должно быть 
---добавлено в таблицу timetable
-CREATE PROCEDURE add_department
-@name as varchar(255) AS
+CREATE PROCEDURE add_employee
+@full_name as varchar(255),
+@main_speciality as integer,
+@education as varchar(255),
+@expirience as integer = 0 AS
 BEGIN
-	DECLARE @new_department_id as integer;
-	SELECT @new_department_id=MAX(department_id) FROM department;
-	if @new_department_id is not null
-		INSERT INTO department(department_id, name) VALUES(@new_department_id, @name);
+	DECLARE @new_employee_id as integer;
+	SELECT @new_employee_id=MAX(employee_id) FROM employee;
+
+	DECLARE @curr_date as Date;
+	SELECT @curr_date=GETDATE();
+
+	if @new_employee_id is not null
+		INSERT INTO employee(employee_id, full_name, main_speciality, hire_date, expirience, education)
+		VALUES(@new_employee_id + 1, @full_name, @main_speciality, @curr_date, @expirience, @education);
 	else
-		INSERT INTO department(department_id, name) VALUES(1, @name);
+		INSERT INTO employee(employee_id, full_name, main_speciality, hire_date, expirience, education)
+		VALUES(1, @full_name, @main_speciality, @curr_date, @expirience, @education);
 END;
 GO
 
--- Данные теперь неактуальны
----- создаем отделы
---insert into department(department_id, name) values (1, 'дирекция');
---insert into department(department_id, name) values (2, 'отдел программирования');
---insert into department(department_id, name) values (3, 'отдел кадров');
---insert into department(department_id, name) values (4, 'аналитический отдел');
+GO
+CREATE PROCEDURE add_passed_course
+-- добавить прохождение сотрудником курса повышения квалификации
+@employee_id as integer,
+@course_id as integer,
+@pass_date as Date = null
+AS
+BEGIN
+	if @pass_date is null
+		SET @pass_date=GETDATE();
+	INSERT INTO emp_course(employee_id, course_id, pass_date) VALUES(@employee_id, @course_id, @pass_date);
+END;
+GO
 
-----создаем должности
---insert into speciality(speciality_id, name) values (1, 'начальник отдела программирования');
---insert into speciality(speciality_id, name) values (2, 'C-программист');
---insert into speciality(speciality_id, name) values (3, 'Python-программист');
---insert into speciality(speciality_id, name) values (4, 'тестировщик');
+GO
+CREATE PROCEDURE add_position_to_timetable
+@department_id as integer,
+@speciality_id as integer,
+@employee_id as integer = null --по умолчанию, сотрудник не назначен на позицию в штатном расписании
+AS
+BEGIN
+	INSERT INTO timetable(department_id, speciality_id, employee_id) 
+	VALUES(@department_id, @speciality_id, @employee_id);
+END;
+GO
 
---insert into speciality(speciality_id, name) values (5, 'гендиректор');
+CREATE TYPE department_description AS TABLE (speciality_id integer, required_employee_num integer);
 
---insert into speciality(speciality_id, name) values (6, 'Начальник отдела кадров');
---insert into speciality(speciality_id, name) values (7, 'Менеджер по персоналу');
---insert into speciality(speciality_id, name) values (8, 'Рекрутер');
---insert into speciality(speciality_id, name) values (9, 'Специалист по кадровому делопроизводству'); 
+GO
+CREATE PROCEDURE add_department
+--вообще добавление нового отдела означает перечисление должностей этого отдела и указание
+--человеко-единиц, требуемых на каждую должность. Соответствующее число строк должно быть 
+--добавлено в таблицу timetable
+@department_name as varchar(255),
+@department_description as department_description READONLY
+AS
+BEGIN
+	DECLARE @new_department_id as integer;
+	SELECT @new_department_id=MAX(department_id) FROM department;
 
---insert into speciality(speciality_id, name) values (10, 'Ведущий специалист аналитического отдела');
---insert into speciality(speciality_id, name) values (11, 'Специалист аналитического отдела');
+	if @new_department_id is null
+		SET @new_department_id=0;
+	INSERT INTO department(department_id, name) VALUES(@new_department_id + 1, @department_name);
 
+	-- добавляем строки в штатное расписание
+	DECLARE @spec_id integer, @req_emp_num integer;
 
----- добавляем в базу сотрудников
---insert into employee(employee_id, name) values (1, 'Александр Кривоногов');
---insert into employee(employee_id, name) values (2, 'Алексей Наумов');
---insert into employee(employee_id, name) values (3, 'Александр Карпов');
---insert into employee(employee_id, name) values (4, 'Андрей Ромель');
---insert into employee(employee_id, name) values (5, 'Анастасия Петрова');
---insert into employee(employee_id, name) values (6, 'Елена Пупкова');
---insert into employee(employee_id, name) values (7, 'Зоя Кондратьева');
---insert into employee(employee_id, name) values (8, 'Владимир Басов');
---insert into employee(employee_id, name) values (9, 'Илья Попов');
---insert into employee(employee_id, name) values (10, 'Виктория Соколова');
+	DECLARE my_cursor CURSOR
+	FOR SELECT speciality_id, required_employee_num
+	FROM @department_description;
 
----- добавляем в базу курсы
---insert into course(course_id, name) values (1, 'Python для опытных');
---insert into course(course_id, name) values (2, 'Английский язык для делового общения');
---insert into course(course_id, name) values (3, 'Программирование микро-контроллеров на C');
---insert into course(course_id, name) values (4, 'Time managment для начинающих');
---insert into course(course_id, name) values (5, 'Управление персоналом');
---insert into course(course_id, name) values (6, 'Секреты и хитрости MS Office');
---insert into course(course_id, name) values (7, 'Основы финансовой грамотности');
+	OPEN my_cursor;
 
----- вносим информацию о том какие курсы прошли сотрудники
---insert into emp_course(employee_id, course_id, date) values (1, 5, '2019-01-14');
---insert into emp_course(employee_id, course_id, date) values (1, 2, '2020-01-14');
---insert into emp_course(employee_id, course_id, date) values (2, 3, '2019-01-14');
---insert into emp_course(employee_id, course_id, date) values (3, 1, '2021-01-14');
+	FETCH NEXT FROM my_cursor INTO @spec_id, @req_emp_num;
 
---insert into emp_course(employee_id, course_id, date) values (5, 4, '2019-02-01');
---insert into emp_course(employee_id, course_id, date) values (6, 6, '2019-02-22');
+	WHILE @@FETCH_STATUS=0
+		begin
+			DECLARE @i integer;
+			SET @i=0
+			PRINT @spec_id;
+			PRINT @req_emp_num;
+			WHILE @i < @req_emp_num
+				begin
+					EXEC add_position_to_timetable @new_department_id, @spec_id
+					SET @i = @i + 1
+				end;
 
---insert into emp_course(employee_id, course_id, date) values (8, 2, '2020-01-14');
---insert into emp_course(employee_id, course_id, date) values (8, 7, '2007-03-14');
+			FETCH NEXT FROM my_cursor INTO @spec_id, @req_emp_num;
+		end;
 
---insert into emp_course(employee_id, course_id, date) values (9, 7, '2022-09-14');
-
-
-----      заполняем позиции в штатном расписании
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (2, 1, 1);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (2, 2, 1);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (2, 2, 2);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (2, 4, 2);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (2, 2, 3);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (2, 3, null);
-
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (2, 5, 8);
-
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (3, 6, 5);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (3, 7, 10);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (3, 8, 5);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (3, 8, 9);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (3, 9, 6);
-
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (4, 10, null);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (4, 11, 4);
---insert into position_in_timetable(department_id, speciality_id, employee_id) values (4, 11, 7);
+	CLOSE my_cursor;
+	DEALLOCATE my_cursor;
+END;
+GO
 
 
--- drop table position_in_timetable;
--- drop table emp_course;
--- drop table employee;
--- drop table course;
--- drop table department;
--- drop table speciality;
+-- ВЫЗОВЫ ПРОЦЕДУР
+GO
+exec add_course 'Основы финансовой грамотности';
+select * from course;
 
+EXEC add_speciality @name='Тестировщик UI', @salary=45000;
+EXEC add_speciality @name='Python разработчик', @salary=60000;
+SELECT * FROM speciality;
+
+EXEC add_employee @full_name='Фаст Никита', @main_speciality='1', @education='Программная инженерия СПБГУ';
+SELECT * FROM employee;
+
+
+EXEC add_passed_course 1, 1
+
+DECLARE @t1 department_description;
+INSERT INTO @t1 VALUES(1, 3);
+INSERT INTO @t1 VALUES(2, 5);
+
+EXEC add_department 'отдел программирования', @t1;
+select * from department;
+select * from timetable;
+GO
+
+-- TRUNCATE TABLE TIMETABLE;
 
 -- insert into position_in_timetable(department_id, speciality_id, employee_id)
 -- select 2, 2, null
@@ -240,4 +256,5 @@ GO
 
 -- select * from position_in_timetable;
 -- truncate position_in_timetable;
+
 
