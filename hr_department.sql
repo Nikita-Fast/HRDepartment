@@ -160,6 +160,8 @@ BEGIN
 END;
 GO
 
+-- СОЗДАЕМ СПЕЦИАЛЬНЫЙ ТИП ДЛЯ ОПИСАНИЕ ТОГО, КАКИЕ ДОЛЖНОСТИ ДОЛЖНЫ БЫТЬ В ОТДЕЛЕ И СКОЛЬКО СОТРУДНИКОВ
+-- ДОЛЖНЫ НА НИХ РАБОТАТЬ
 CREATE TYPE department_description AS TABLE (speciality_id integer, required_employee_num integer);
 
 GO
@@ -176,7 +178,9 @@ BEGIN
 
 	if @new_department_id is null
 		SET @new_department_id=0;
-	INSERT INTO department(department_id, name) VALUES(@new_department_id + 1, @department_name);
+	SET @new_department_id = @new_department_id + 1;
+
+	INSERT INTO department(department_id, name) VALUES(@new_department_id, @department_name);
 
 	-- добавляем строки в штатное расписание
 	DECLARE @spec_id integer, @req_emp_num integer;
@@ -193,8 +197,6 @@ BEGIN
 		begin
 			DECLARE @i integer;
 			SET @i=0
-			PRINT @spec_id;
-			PRINT @req_emp_num;
 			WHILE @i < @req_emp_num
 				begin
 					EXEC add_position_to_timetable @new_department_id, @spec_id
@@ -209,37 +211,35 @@ BEGIN
 END;
 GO
 
-
 -- ВЫЗОВЫ ПРОЦЕДУР
 GO
-exec add_course 'Основы финансовой грамотности';
-select * from course;
+EXEC add_course 'Основы финансовой грамотности';
+EXEC add_course 'Технический английский язык';
 
 EXEC add_speciality @name='Тестировщик UI', @salary=45000;
 EXEC add_speciality @name='Python разработчик', @salary=60000;
-SELECT * FROM speciality;
+EXEC add_speciality @name='Специалист по ПЛИС', @salary=55000;
 
-EXEC add_employee @full_name='Фаст Никита', @main_speciality='1', @education='Программная инженерия СПБГУ';
+EXEC add_employee @full_name='Фаст Никита', @main_speciality='2', @education='Программная инженерия СПБГУ';
+EXEC add_employee @full_name='Кривоногов Александр', @main_speciality='3', @education='ЛЭТИ';
 SELECT * FROM employee;
 
-EXEC add_position_to_timetable 4, 2, 1;
-
-EXEC add_passed_course 1, 1
+--EXEC add_passed_course 1, 1
 
 DECLARE @t1 department_description;
-INSERT INTO @t1 VALUES(1, 3);
-INSERT INTO @t1 VALUES(2, 5);
+INSERT INTO @t1 VALUES(1, 1);
+INSERT INTO @t1 VALUES(2, 3);
+INSERT INTO @t1 VALUES(3, 2);
 
-EXEC add_department 'отдел программирования', @t1;
-select * from department;
-select * from timetable;
-GO
+EXEC add_department 'отдел программирования4', @t1;
 
 GO
-CREATE VIEW v_timetable(dep_name, speciality, emp_name)
--- показать все расписание
+
+GO
+CREATE VIEW v_timetable(dep_id, dep_name, speciality, emp_name)
+-- ПОКАЗАТЬ ШТАТНОЕ РАСПИСАНИЕ ЦЕЛИКОМ
 AS
-SELECT d.name, s.name, e.full_name
+SELECT d.department_id, d.name, s.name, e.full_name
 FROM timetable as t
 JOIN department as d ON d.department_id = t.department_id
 JOIN speciality as s ON s.speciality_id = t.speciality_id
@@ -249,27 +249,88 @@ GO
 
 SELECT * FROM v_timetable ORDER BY speciality;
 
--- TRUNCATE TABLE TIMETABLE;
 
--- insert into position_in_timetable(department_id, speciality_id, employee_id)
--- select 2, 2, null
--- from generate_series(1, 4);
+-------(ЗАПРОСЫ)----------
+-- ПОЛУЧИТЬ ПЕРЕЧЕНЬ СОТРУДНИКОВ ОТДЕЛА 
+SELECT DISTINCT d.name, e.full_name FROM 
+timetable as t 
+JOIN department as d ON d.department_id = t.department_id
+JOIN employee as e ON e.employee_id = t.employee_id
+;
 
--- select * from department_info cross join generate_series(1, 4);
+-- ПОЛУЧИТЬ ЗАНИМАЕМЫЕ СОТРУДНИКОМ ДОЛЖНОСТИ
+SELECT e.full_name, s.name FROM
+timetable as t
+JOIN employee as e ON e.employee_id = t.employee_id
+JOIN speciality as s ON s.speciality_id = t.speciality_id
+ORDER BY e.full_name
+;
+
+-- основная специальность сотрудников
+SELECT e.full_name, s.name FROM 
+timetable as t
+JOIN employee as e ON e.employee_id = t.employee_id
+JOIN speciality as s ON e.main_speciality = s.speciality_id
+ORDER BY e.full_name, s.name
+;
 
 
--- select * from department_info where department_id = 2;
--- select speciality_id from (
---     select department_info.* from department_info cross join generate_series(1,3)
--- );
+-- количество сотрудников на каждой должности в каждом отделе
+SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
+timetable as t
+JOIN department as d ON d.department_id = t.department_id
+JOIN speciality as s ON s.speciality_id = t.speciality_id
+GROUP BY d.department_id, d.name, s.name
+ORDER BY d.department_id, spec_name
+;
 
--- select distinct speciality_id from department_info;
+GO
+CREATE FUNCTION get_emp_num()
+RETURNS TABLE
+AS
+RETURN(
+	SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
+	timetable as t
+	JOIN department as d ON d.department_id = t.department_id
+	JOIN speciality as s ON s.speciality_id = t.speciality_id
+	GROUP BY d.department_id, d.name, s.name
+)
+;
+GO
 
 
--- select staff_units from department_info where 
---     select distinct speciality_id from department_info where department_id = 2
+-- требуемое количество сотрудников на каждой должности в каждом отделе
+SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as required_emp_num FROM 
+timetable as t
+JOIN department as d ON d.department_id = t.department_id
+JOIN speciality as s ON s.speciality_id = t.speciality_id
+GROUP BY d.department_id, d.name, s.name
+ORDER BY d.department_id, spec_name
+;
 
--- select * from position_in_timetable;
--- truncate position_in_timetable;
+GO
+CREATE FUNCTION get_req_emp_num()
+RETURNS TABLE
+AS
+RETURN(
+	SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as req_emp_num FROM 
+	timetable as t
+	JOIN department as d ON d.department_id = t.department_id
+	JOIN speciality as s ON s.speciality_id = t.speciality_id
+	GROUP BY d.department_id, d.name, s.name
+)
+;
+GO
 
+
+-- ПОЛУЧИТЬ КОЛИЧЕСТВО ВАКАНТНЫХ МЕСТ
+SELECT	a.department_id as dep_id, 
+		a.dep_name, 
+		a.spec_name, 
+		a.req_emp_num - b.emp_num as vakant 
+FROM 
+get_req_emp_num() as a 
+JOIN get_emp_num() as b ON 
+a.department_id=b.department_id and a.spec_name=b.spec_name
+;
 
