@@ -222,6 +222,7 @@ SELECT * FROM speciality;
 EXEC add_employee @full_name='Фаст Никита', @main_speciality='1', @education='Программная инженерия СПБГУ';
 SELECT * FROM employee;
 
+EXEC add_position_to_timetable 4, 2, 1;
 
 EXEC add_passed_course 1, 1
 
@@ -233,6 +234,20 @@ EXEC add_department 'отдел программирования', @t1;
 select * from department;
 select * from timetable;
 GO
+
+GO
+CREATE VIEW v_timetable(dep_name, speciality, emp_name)
+-- показать все расписание
+AS
+SELECT d.name, s.name, e.full_name
+FROM timetable as t
+JOIN department as d ON d.department_id = t.department_id
+JOIN speciality as s ON s.speciality_id = t.speciality_id
+LEFT JOIN employee as e ON e.employee_id = t.employee_id
+;
+GO
+
+SELECT * FROM v_timetable ORDER BY speciality;
 
 -- TRUNCATE TABLE TIMETABLE;
 
