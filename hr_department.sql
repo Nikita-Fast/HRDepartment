@@ -9,72 +9,126 @@ GO
 USE hr_department
 
 -- Создаем таблицы
-create table department(
-    department_id integer CONSTRAINT department_pk PRIMARY KEY,
-    name varchar(50) not null
-);
+--create table department(
+--    department_id integer CONSTRAINT department_pk PRIMARY KEY,
+--    name varchar(50) not null
+--);
 
-create table speciality(
-    speciality_id integer CONSTRAINT speciality_pk PRIMARY KEY,
-    name varchar(50) not null,
-	salary integer not null
-);
+--create table speciality(
+--    speciality_id integer CONSTRAINT speciality_pk PRIMARY KEY,
+--    name varchar(50) not null,
+--	salary integer not null
+--);
 
-create table employee(
-    employee_id integer CONSTRAINT employee_pk PRIMARY KEY,
-    full_name varchar(50) not null,
-	main_speciality integer not null,
-	expirience integer not null,
-	education varchar(100) not null
-);
+--create table employee(
+--    employee_id integer CONSTRAINT employee_pk PRIMARY KEY,
+--    full_name varchar(50) not null,
+--	main_speciality integer not null,
+--	expirience integer not null,
+--	education varchar(100) not null
+--);
 
-create table timetable(
-    department_id integer not null,
-    speciality_id integer not null,
-    employee_id   integer null
-);
+--create table timetable(
+--    department_id integer not null,
+--    speciality_id integer not null,
+--    employee_id   integer null
+--);
 
-create table course(
-    course_id integer CONSTRAINT course_pk PRIMARY KEY,
-    name varchar(100)  not null
-);
+--create table course(
+--    course_id integer CONSTRAINT course_pk PRIMARY KEY,
+--    name varchar(100)  not null
+--);
 
-create table emp_course(
-    employee_id integer not null,
-    course_id integer not null,
-);
+--create table emp_course(
+--    employee_id integer not null,
+--    course_id integer not null,
+--);
 
 -- Добавляем внешние ключи
-alter table employee add constraint FK_employee_speciality
-	FOREIGN KEY (main_speciality)
-	REFERENCES speciality(speciality_id)
-;
+--alter table employee add constraint FK_employee_speciality
+--	FOREIGN KEY (main_speciality)
+--	REFERENCES speciality(speciality_id)
+--;
 
-alter table timetable add constraint FK_timetable_department
-    FOREIGN KEY (department_id)
-    REFERENCES department(department_id)
-;
+--alter table timetable add constraint FK_timetable_department
+--    FOREIGN KEY (department_id)
+--    REFERENCES department(department_id)
+--;
 
-alter table timetable add constraint FK_timetable_speciality
-    FOREIGN KEY (speciality_id)
-    REFERENCES speciality(speciality_id)
-;
+--alter table timetable add constraint FK_timetable_speciality
+--    FOREIGN KEY (speciality_id)
+--    REFERENCES speciality(speciality_id)
+--;
 
-alter table timetable add constraint FK_timetable_employee
-    FOREIGN KEY (employee_id)
-    REFERENCES employee(employee_id)
-;
+--alter table timetable add constraint FK_timetable_employee
+--    FOREIGN KEY (employee_id)
+--    REFERENCES employee(employee_id)
+--;
 
-alter table emp_course add constraint FK_emp_course_employee
-   FOREIGN KEY (employee_id)
-    REFERENCES employee(employee_id)
-;
+--alter table emp_course add constraint FK_emp_course_employee
+--   FOREIGN KEY (employee_id)
+--    REFERENCES employee(employee_id)
+--;
 
-alter table emp_course add constraint FK_emp_course_course
-   FOREIGN KEY (course_id)
-    REFERENCES course(course_id)
-;
+--alter table emp_course add constraint FK_emp_course_course
+--   FOREIGN KEY (course_id)
+--    REFERENCES course(course_id)
+--;
 
+GO
+
+GO
+-- курсы могут иметь одинаковые имена, ведь name не является PK
+CREATE PROCEDURE add_course
+@name as varchar(255) AS
+BEGIN
+	DECLARE @new_course_id as integer;
+	SELECT @new_course_id=MAX(course_id) FROM course;
+	if @new_course_id is not null
+		begin
+			INSERT INTO course(course_id, name) VALUES(@new_course_id, @name);
+		end
+	else
+		INSERT INTO course(course_id, name) VALUES(1, @name);
+END;
+
+--exec add_course 'Основы финансовой грамотности';
+--select * from course;
+GO
+
+GO
+CREATE PROCEDURE add_speciality
+@name as varchar(255),
+@salary as integer AS
+BEGIN
+	DECLARE @new_speciality_id as integer;
+	SELECT @new_speciality_id=MAX(speciality_id) FROM speciality;
+	if @new_speciality_id is not null
+		begin
+			INSERT INTO speciality(speciality_id, name, salary) VALUES(@new_speciality_id, @name, @salary);
+		end
+	else
+		INSERT INTO speciality(speciality_id, name, salary) VALUES(1, @name, @salary);
+END;
+
+--EXEC add_speciality @name='Тестировщик UI', @salary=45000;
+SELECT * FROM speciality;
+GO
+
+GO
+--вообще добавление нового отдела означает перечисление должностей этого отдела и указание
+--человеко-единиц, требуемых на каждую должность. Соответствующее число строк должно быть 
+--добавлено в таблицу timetable
+CREATE PROCEDURE add_department
+@name as varchar(255) AS
+BEGIN
+	DECLARE @new_department_id as integer;
+	SELECT @new_department_id=MAX(department_id) FROM department;
+	if @new_department_id is not null
+		INSERT INTO department(department_id, name) VALUES(@new_department_id, @name);
+	else
+		INSERT INTO department(department_id, name) VALUES(1, @name);
+END;
 GO
 
 -- Данные теперь неактуальны
