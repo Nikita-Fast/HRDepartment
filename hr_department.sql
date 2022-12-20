@@ -3,74 +3,81 @@
 --    - у нескольких сотрудников может быть одинаковая должность(speciality)
 --    - позиция в штатном рапсисании может быть занята максимум одним сотрудником
 
---CREATE DATABASE hr_department;
---GO
+CREATE DATABASE hr_department;
+GO
 
 USE hr_department
 
---create table department(
---    department_id integer not null,
---    name varchar(50) not null,
---    CONSTRAINT department_pk PRIMARY KEY (department_id)
---);
+-- Создаем таблицы
+create table department(
+    department_id integer CONSTRAINT department_pk PRIMARY KEY,
+    name varchar(50) not null
+);
 
-----то что на самом деле должно быть должностью. Должности пофиг на сотрудника. Сотрудник важен для позиции в штатном расписании
---create table speciality(
---    speciality_id integer CONSTRAINT speciality_pk PRIMARY KEY,
---    name varchar(50) not null
---);
+create table speciality(
+    speciality_id integer CONSTRAINT speciality_pk PRIMARY KEY,
+    name varchar(50) not null,
+	salary integer not null
+);
 
----- сотрудник организации. у него точно есть должность, а возможно и не одна
---create table employee(
---    employee_id integer CONSTRAINT employee_pk PRIMARY KEY,
---    name varchar(50) not null
---);
+create table employee(
+    employee_id integer CONSTRAINT employee_pk PRIMARY KEY,
+    full_name varchar(50) not null,
+	main_speciality integer not null,
+	expirience integer not null,
+	education varchar(100) not null
+);
 
---create table position_in_timetable(
---    department_id integer not null,
---    speciality_id integer not null,
---    employee_id   integer null
---);
+create table timetable(
+    department_id integer not null,
+    speciality_id integer not null,
+    employee_id   integer null
+);
 
---alter table position_in_timetable add constraint fk1
---    FOREIGN KEY (department_id)
---    REFERENCES department(department_id)
---;
+create table course(
+    course_id integer CONSTRAINT course_pk PRIMARY KEY,
+    name varchar(100)  not null
+);
 
---alter table position_in_timetable add constraint fk2
---    FOREIGN KEY (speciality_id)
---    REFERENCES speciality(speciality_id)
---;
+create table emp_course(
+    employee_id integer not null,
+    course_id integer not null,
+);
 
---alter table position_in_timetable add constraint fk3
---    FOREIGN KEY (employee_id)
---    REFERENCES employee(employee_id)
---;
+-- Добавляем внешние ключи
+alter table employee add constraint FK_employee_speciality
+	FOREIGN KEY (main_speciality)
+	REFERENCES speciality(speciality_id)
+;
 
---create table course(
---    course_id integer CONSTRAINT course_pk PRIMARY KEY,
---    name varchar(100)  not null
---);
+alter table timetable add constraint FK_timetable_department
+    FOREIGN KEY (department_id)
+    REFERENCES department(department_id)
+;
 
---create table emp_course(
---    employee_id integer not null,
---    course_id integer not null,
---    date date not null
+alter table timetable add constraint FK_timetable_speciality
+    FOREIGN KEY (speciality_id)
+    REFERENCES speciality(speciality_id)
+;
 
---);
+alter table timetable add constraint FK_timetable_employee
+    FOREIGN KEY (employee_id)
+    REFERENCES employee(employee_id)
+;
 
---alter table emp_course add constraint fk4
---   FOREIGN KEY (employee_id)
---    REFERENCES employee(employee_id)
---;
+alter table emp_course add constraint FK_emp_course_employee
+   FOREIGN KEY (employee_id)
+    REFERENCES employee(employee_id)
+;
 
---alter table emp_course add constraint fk5
---   FOREIGN KEY (course_id)
---    REFERENCES course(course_id)
---;
+alter table emp_course add constraint FK_emp_course_course
+   FOREIGN KEY (course_id)
+    REFERENCES course(course_id)
+;
 
+GO
 
-
+-- Данные теперь неактуальны
 ---- создаем отделы
 --insert into department(department_id, name) values (1, 'дирекция');
 --insert into department(department_id, name) values (2, 'отдел программирования');
@@ -150,7 +157,6 @@ USE hr_department
 --insert into position_in_timetable(department_id, speciality_id, employee_id) values (4, 11, 4);
 --insert into position_in_timetable(department_id, speciality_id, employee_id) values (4, 11, 7);
 
---GO
 
 -- drop table position_in_timetable;
 -- drop table emp_course;
@@ -180,3 +186,4 @@ USE hr_department
 
 -- select * from position_in_timetable;
 -- truncate position_in_timetable;
+
