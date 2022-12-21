@@ -54,6 +54,14 @@ CREATE TABLE employee_speciality(
 	is_main_spec bit default 0 not null
 );
 
+CREATE TABLE work_log(
+	emp_id integer not null,
+	spec_id integer not null,
+	days_of_work integer not null
+);
+
+
+
  --Добавляем внешние ключи
 alter table employee add constraint FK_employee_speciality
 	FOREIGN KEY (main_speciality)
@@ -101,6 +109,17 @@ ALTER TABLE employee_speciality ADD CONSTRAINT FK_employee_speciality_speciality
 	ON DELETE CASCADE
 ;
 
+ALTER TABLE work_log ADD CONSTRAINT FK_work_log_employee
+	FOREIGN KEY (emp_id)
+    REFERENCES employee(employee_id)
+	ON DELETE CASCADE
+;
+
+ALTER TABLE work_log ADD CONSTRAINT FK_work_log_speciality
+	FOREIGN KEY (spec_id)
+    REFERENCES speciality(speciality_id)
+	ON DELETE CASCADE
+;
 
 GO
 
@@ -350,6 +369,14 @@ CREATE TRIGGER tr_del_employee_speciality
 ON employee_speciality AFTER DELETE
 AS
 BEGIN
+	INSERT INTO work_log(emp_id, spec_id, days_of_work)
+	SELECT 
+		employee_id, 
+		speciality_id,
+		DATEDIFF(DAY, hire_date, GETDATE())
+	FROM deleted
+
+
 	-- если удалили главную должность сотрудника, то сделать главной должностью одну из по-совместительству
 	--как быть если удалили больше одной строки?
 	--пройти все строки по одной с помощью курсора?
@@ -419,12 +446,53 @@ EXEC add_department 'отдел программирования4', @t1;
 EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 1;
 EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 2;
 EXEC add_position_to_timetable 1, @speciality_id = 2, @employee_id = 2;
-EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = null;
+EXEC add_position_to_timetable 1, @speciality_id = 2, @employee_id = 4;
 
-EXEC fire_employee @emp_id = 2;
+EXEC fire_employee @emp_id = 3;
 
 GO
 
+INSERT INTO work_log(emp_id, spec_id, days_of_work)
+VALUES 
+(1, 1, 25),
+(1, 2, 75),
+(2, 2, 350)
+
+-- ПОЛУЧИТЬ СТАЖ ВСЕХ СОТРУДНИКОВ В ДНЯХ
+-- GETDATE() заменить на CAST('2022-12-31' as DATE) для быстрого теста
+
+SELECT t1.employee_id, t1.days + t2.days as work_expirience_in_days
+FROM 
+(
+	SELECT e.employee_id, SUM(ISNULL(days_of_work, 0)) as days FROM work_log
+	RIGHT JOIN employee as e ON e.employee_id=work_log.emp_id
+	GROUP BY e.employee_id
+) as t1 
+JOIN 
+(
+	SELECT e.employee_id, SUM( ISNULL( DATEDIFF(DAY, es.hire_date, CAST('2022-12-31' as DATE)) , 0) ) as days 
+	FROM employee_speciality as es
+	RIGHT JOIN employee as e ON e.employee_id=es.employee_id
+	GROUP BY e.employee_id
+) as t2 
+ON t1.employee_id=t2.employee_id
+;
+
+----### ПРЕДЫДЩУИЙ ЗАПРОС СОСТОИТ ИЗ СЛЕДЮУЩИХ ДВУХ
+---- ДЛЯ КАЖДОГО СТРУДНИКА ПОЛУЧИТЬ ЕГО СТАЖ НА ПРОШЛЫХ ДОЛЖНОСТЯХ
+--SELECT e.employee_id, SUM(ISNULL(days_of_work, 0)) as days FROM work_log
+--RIGHT JOIN employee as e ON e.employee_id=work_log.emp_id
+--GROUP BY e.employee_id
+--;
+
+---- ДЛЯ КАЖДОГО СТРУДНИКА ПОЛУЧИТЬ ЕГО СТАЖ НА ТЕКУЩИХ ДОЛЖНОСТЯХ
+--SELECT 
+--e.employee_id, 
+--SUM( ISNULL( DATEDIFF(DAY, es.hire_date, CAST('2022-12-31' as DATE)) , 0) ) as days 
+--FROM employee_speciality as es
+--RIGHT JOIN employee as e ON e.employee_id=es.employee_id
+--GROUP BY e.employee_id
+--;
 
 
 
