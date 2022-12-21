@@ -3,7 +3,7 @@
 --    - у нескольких сотрудников может быть одинаковая должность(speciality)
 --    - позиция в штатном рапсисании может быть занята максимум одним сотрудником
 
-CREATE DATABASE hr_department;
+--CREATE DATABASE hr_department;
 GO
 
 USE hr_department
@@ -29,6 +29,7 @@ create table employee(
 );
 
 create table timetable(
+	id integer CONSTRAINT timetable_pk PRIMARY KEY,
     department_id integer not null,
     speciality_id integer not null,
     employee_id   integer null
@@ -192,8 +193,12 @@ AS
 BEGIN
 	--навесить на timetable триггер после вставки, чтобы в табли emp_spec были добавлены данные
 	--о сотрудниках на должностях
-	INSERT INTO timetable(department_id, speciality_id, employee_id) 
-	VALUES(@department_id, @speciality_id, @employee_id);
+	DECLARE @id integer;
+	SELECT @id = ISNULL(MAX(id), 0) FROM timetable;
+	SET @id = @id + 1
+
+	INSERT INTO timetable(id, department_id, speciality_id, employee_id) 
+	VALUES(@id, @department_id, @speciality_id, @employee_id);
 END;
 GO
 
@@ -262,25 +267,27 @@ END;
 GO
 
 
---GO
---CREATE PROCEDURE assign_work_to_emp
---@dep_id integer,
---@spec_id integer,
---@emp_id integer
---AS
---BEGIN
---	DECLARE @vacant_num integer;
+GO
+CREATE PROCEDURE assign_work_to_emp
+@dep_id integer,
+@spec_id integer,
+@emp_id integer
+AS
+BEGIN
+	DECLARE @vacant_num integer;
 
---	SELECT @vacant_num = COUNT(*) FROM timetable 
---	WHERE department_id = @dep_id AND speciality_id = @spec_id AND employee_id is null
+	SELECT @vacant_num = COUNT(*) FROM timetable 
+	WHERE department_id = @dep_id AND speciality_id = @spec_id AND employee_id is null
 
---	if @vacant_num > 0
---	begin
---		UPDATE timetable
---		SET employee_id = @emp_id
---		WHERE 
---	end;
---END;
+	if @vacant_num > 0
+	begin
+		UPDATE timetable
+		SET employee_id = @emp_id
+		WHERE id = 
+		(SELECT TOP 1 id FROM timetable
+		WHERE department_id = @dep_id AND speciality_id = @spec_id AND employee_id is null);
+	end;
+END;
 
 
 --GO
@@ -351,16 +358,13 @@ GO
 --;
 
 GO
-CREATE TRIGGER tr_ins_timetable
-ON timetable AFTER INSERT
+CREATE TRIGGER tr_ins_upd_timetable
+ON timetable AFTER INSERT, UPDATE
 AS
 	--если в расписание добавилась строка с не нулевым полем сотрудника, то
 	--данные о сотруднике и должности надо добавить в emp_spec
 	DECLARE @new_id as integer;
-	SELECT @new_id=MAX(employee_speciality_id) FROM employee_speciality;
-
-	if @new_id is null
-		SET @new_id=0;
+	SELECT @new_id= ISNULL(MAX(employee_speciality_id), 0) FROM employee_speciality;
 	SET @new_id = @new_id + 1;
 
 	--нужно понять, как правильно указывать главну специальность (trigger on emp_spec?)
@@ -491,7 +495,7 @@ EXEC add_passed_course 7, 4, '2015-08-09';
 DECLARE @t1 department_description;
 INSERT INTO @t1 VALUES(4, 1);
 INSERT INTO @t1 VALUES(5, 1);
-INSERT INTO @t1 VALUES(3, 2);
+INSERT INTO @t1 VALUES(2, 2);
 INSERT INTO @t1 VALUES(3, 3);
 EXEC add_department 'отдел программирования', @t1;
 
@@ -501,8 +505,8 @@ INSERT INTO @t2 VALUES(7, 2);
 EXEC add_department 'отдел кадров', @t2;
 
 DECLARE @t3 department_description;
-INSERT INTO @t2 VALUES(8, 2);
-INSERT INTO @t2 VALUES(1, 1);
+INSERT INTO @t3 VALUES(8, 2);
+INSERT INTO @t3 VALUES(1, 1);
 EXEC add_department 'отдел тестирования', @t3;
 
 -- заполняем трудовую историю сотрудников
@@ -521,6 +525,18 @@ VALUES
 (7, 8, 2600),
 (8, 7, 540),
 (8, 6, 1350)
+
+EXEC assign_work_to_emp @dep_id=1, @spec_id=4, @emp_id=2;
+EXEC assign_work_to_emp			1,			5,		   2;
+EXEC assign_work_to_emp			1,			3,		   2;
+EXEC assign_work_to_emp			1,			2,		   1;
+EXEC assign_work_to_emp			1,			3,		   3;
+EXEC assign_work_to_emp			1,			2,		   3;
+EXEC assign_work_to_emp			2,			7,		   8;
+EXEC assign_work_to_emp			3,			8,		   4;
+EXEC assign_work_to_emp			3,			8,		   5;
+EXEC assign_work_to_emp			3,			7,		   6;
+
 
 --EXEC fire_employee @emp_id = 4;
 
@@ -562,17 +578,27 @@ ON t1.employee_id=t2.employee_id
 --GROUP BY e.employee_id
 --;
 
---#2 ПОДСЧИТАТЬ ЗАРПЛАТУ ВСЕХ СОТРУДНИКОВ
+--#2 НАЙТИ НАИМЕНЕЕ ЗАНЯТЫХ СОТРУДНИКОВ
+	SELECT 
+		e.employee_id, 
+		e.full_name, 
+		SUM(case when es.speciality_id is null then 0 else 1 end) as cnt
+	FROM employee_speciality as es
+	RIGHT JOIN employee as e ON e.employee_id = es.employee_id
+	GROUP BY e.employee_id, e.full_name
+	HAVING SUM(case when es.speciality_id is null then 0 else 1 end) = 0
+	ORDER BY employee_id
+	;
 
---#3 ЧИСЛО КУРСОВ ПРОЙДЕННЫХ СОТРУДНИКАМИ ЗА ПОСЛЕДНИЕ 6 МЕСЯЦЕВ
+--#3 ЧИСЛО КУРСОВ ПРОЙДЕННЫХ СОТРУДНИКАМИ ЗА ПОСЛЕДНИЕ 36 МЕСЯЦЕВ
 SELECT e.full_name, COUNT(*) as courses_passed FROM emp_course as ec
 JOIN employee as e ON ec.employee_id = e.employee_id
-WHERE DATEDIFF(MONTH, ec.pass_date, GETDATE()) < 6
+WHERE DATEDIFF(MONTH, ec.pass_date, GETDATE()) < 36
 GROUP BY e.full_name
 ORDER BY courses_passed
 ;
 
-
+--#4 ПОДСЧИТАТЬ ЗАРПЛАТУ ВСЕХ СОТРУДНИКОВ
 
 -------(ЗАПРОСЫ)----------
 -- ПОЛУЧИТЬ ПЕРЕЧЕНЬ СОТРУДНИКОВ ОТДЕЛА 
@@ -657,4 +683,34 @@ ORDER BY courses_passed
 --JOIN get_emp_num() as b ON 
 --a.department_id=b.department_id and a.spec_name=b.spec_name
 --;
+
+--DROP TABLE work_log;
+--DROP TABLE employee_speciality;
+--DROP TABLE emp_course;
+--DROP TABLE course;
+--DROP TABLE timetable;
+--DROP TABLE employee;
+--DROP TABLE speciality;
+--DROP TABLE department;
+
+--DROP VIEW v_emp_course;
+--DROP VIEW v_employee_speciality;
+--DROP VIEW v_timetable;
+--DROP VIEW v_work_log;
+
+--DROP PROCEDURE add_course;
+--DROP PROCEDURE add_department;
+--DROP PROCEDURE add_employee;
+--DROP PROCEDURE add_passed_course;
+--DROP PROCEDURE add_position_to_timetable;
+--DROP PROCEDURE add_speciality;
+--DROP PROCEDURE assign_work_to_emp;
+--DROP PROCEDURE fire_employee;
+
+--DROP TYPE department_description;
+
+--DROP TRIGGER tr_del_emp_course;
+--DROP TRIGGER tr_ins_upd_timetable;
+--DROP TRIGGER tr_ins_employee_speciality;
+--DROP TRIGGER tr_del_employee_speciality;
 
