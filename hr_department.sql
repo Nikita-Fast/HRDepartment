@@ -24,7 +24,6 @@ create table employee(
     employee_id integer CONSTRAINT employee_pk PRIMARY KEY,
     full_name varchar(50) not null,
 	main_speciality integer not null,
-	hire_date date not null,
 	expirience integer not null,
 	education varchar(100) not null
 );
@@ -46,6 +45,15 @@ create table emp_course(
 	pass_date Date not null
 );
 
+
+CREATE TABLE employee_speciality(
+	employee_speciality_id integer CONSTRAINT employee_speciality_pk PRIMARY KEY,
+	employee_id integer not null,
+	speciality_id integer not null,
+	hire_date Date not null,
+	is_main_spec bit default 0 not null
+);
+
  --Добавляем внешние ключи
 alter table employee add constraint FK_employee_speciality
 	FOREIGN KEY (main_speciality)
@@ -55,7 +63,9 @@ alter table employee add constraint FK_employee_speciality
 alter table timetable add constraint FK_timetable_department
     FOREIGN KEY (department_id)
     REFERENCES department(department_id)
+	ON DELETE CASCADE
 ;
+
 
 alter table timetable add constraint FK_timetable_speciality
     FOREIGN KEY (speciality_id)
@@ -78,6 +88,19 @@ alter table emp_course add constraint FK_emp_course_course
    FOREIGN KEY (course_id)
     REFERENCES course(course_id)
 ;
+
+ALTER TABLE employee_speciality ADD CONSTRAINT FK_employee_speciality_employee
+	FOREIGN KEY (employee_id)
+    REFERENCES employee(employee_id)
+	ON DELETE CASCADE
+;
+
+ALTER TABLE employee_speciality ADD CONSTRAINT FK_employee_speciality_speciality
+	FOREIGN KEY (speciality_id)
+    REFERENCES speciality(speciality_id)
+	ON DELETE CASCADE
+;
+
 
 GO
 
@@ -124,15 +147,12 @@ BEGIN
 	DECLARE @new_employee_id as integer;
 	SELECT @new_employee_id=MAX(employee_id) FROM employee;
 
-	DECLARE @curr_date as Date;
-	SELECT @curr_date=GETDATE();
-
 	if @new_employee_id is not null
-		INSERT INTO employee(employee_id, full_name, main_speciality, hire_date, expirience, education)
-		VALUES(@new_employee_id + 1, @full_name, @main_speciality, @curr_date, @expirience, @education);
+		INSERT INTO employee(employee_id, full_name, main_speciality, expirience, education)
+		VALUES(@new_employee_id + 1, @full_name, @main_speciality, @expirience, @education);
 	else
-		INSERT INTO employee(employee_id, full_name, main_speciality, hire_date, expirience, education)
-		VALUES(1, @full_name, @main_speciality, @curr_date, @expirience, @education);
+		INSERT INTO employee(employee_id, full_name, main_speciality, expirience, education)
+		VALUES(1, @full_name, @main_speciality, @expirience, @education);
 END;
 GO
 
@@ -157,10 +177,13 @@ CREATE PROCEDURE add_position_to_timetable
 @employee_id as integer = null --по умолчанию, сотрудник не назначен на позицию в штатном расписании
 AS
 BEGIN
+	--навесить на timetable триггер после вставки, чтобы в табли emp_spec были добавлены данные
+	--о сотрудниках на должностях
 	INSERT INTO timetable(department_id, speciality_id, employee_id) 
 	VALUES(@department_id, @speciality_id, @employee_id);
 END;
 GO
+
 
 -- СОЗДАЕМ СПЕЦИАЛЬНЫЙ ТИП ДЛЯ ОПИСАНИЕ ТОГО, КАКИЕ ДОЛЖНОСТИ ДОЛЖНЫ БЫТЬ В ОТДЕЛЕ И СКОЛЬКО СОТРУДНИКОВ
 -- ДОЛЖНЫ НА НИХ РАБОТАТЬ
@@ -225,37 +248,6 @@ BEGIN
 END;
 GO
 
--- ВЫЗОВЫ ПРОЦЕДУР
-GO
-EXEC add_course 'Основы финансовой грамотности';
-EXEC add_course 'Технический английский язык';
-
-EXEC add_speciality @name='Тестировщик UI', @salary=45000;
-EXEC add_speciality @name='Python разработчик', @salary=60000;
-EXEC add_speciality @name='Специалист по ПЛИС', @salary=55000;
-
-EXEC add_employee @full_name='Фаст Никита', @main_speciality='2', @education='Программная инженерия СПБГУ';
-EXEC add_employee @full_name='Кривоногов Александр', @main_speciality='3', @education='ЛЭТИ';
-SELECT * FROM employee;
-
-EXEC add_passed_course 1, 1, '2022-12-19'
-EXEC add_passed_course 2, 1, '2020-05-14'
-EXEC add_passed_course 2, 2
-
-DECLARE @t1 department_description;
-INSERT INTO @t1 VALUES(1, 1);
-INSERT INTO @t1 VALUES(2, 3);
-INSERT INTO @t1 VALUES(3, 2);
-
-EXEC add_department 'отдел программирования4', @t1;
-
-EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 1;
-EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 2;
-EXEC add_position_to_timetable 1, @speciality_id = 2, @employee_id = 2;
-
-EXEC fire_employee @emp_id = 2;
-
-GO
 
 GO
 CREATE VIEW v_timetable(dep_id, dep_name, speciality, emp_name)
@@ -280,21 +272,18 @@ JOIN course as c ON c.course_id = emp_course.course_id
 GO
 
 GO
--- emp_name, |dep_id, dep_name, spec_name|, hire_date, exp
-
-CREATE VIEW v_employee(emp_name, main_spec_name, salary, hire_date, expirience)
+CREATE VIEW v_employee(emp_name, main_spec_name, salary, expirience)
 AS
-SELECT e.full_name, s.name, s.salary, e.hire_date, e.expirience
+SELECT e.full_name, s.name, s.salary, e.expirience
 FROM employee as e
 JOIN speciality s ON e.main_speciality = s.speciality_id
 ;
 GO
 
 
-SELECT * FROM v_timetable ORDER BY speciality;
-SELECT * FROM v_emp_course ORDER BY pass_date, emp_name;
-SELECT * FROM v_employee ORDER BY emp_name;
-
+--SELECT * FROM v_timetable ORDER BY speciality;
+--SELECT * FROM v_emp_course ORDER BY pass_date, emp_name;
+--SELECT * FROM v_employee ORDER BY emp_name;
 
 
 -------TRIGGERS--------------
@@ -306,14 +295,138 @@ AS ROLLBACK
 ;
 GO
 
--- УДАЛИТЬ НЕ ПОЛУЧИТСЯ
-DELETE FROM emp_course WHERE employee_id = 2;
-select * from v_emp_course;
+---- УДАЛИТЬ НЕ ПОЛУЧИТСЯ
+--DELETE FROM emp_course WHERE employee_id = 2;
+--select * from v_emp_course;
 
--- УДАЛИТЬ НЕ ПОЛУЧИТСЯ, ХОТЯ И ВКЛЮЧЕНО КАСКАДНОЕ УДАЛЕНИЕ У ТАБЛИЦЫ ССЫЛАЮЩИХСЯ НА employee
-DELETE FROM employee
-WHERE employee_id = 1
-;
+---- УДАЛИТЬ НЕ ПОЛУЧИТСЯ, ХОТЯ И ВКЛЮЧЕНО КАСКАДНОЕ УДАЛЕНИЕ У ТАБЛИЦЫ ССЫЛАЮЩИХСЯ НА employee
+--DELETE FROM employee
+--WHERE employee_id = 1
+--;
+
+GO
+CREATE TRIGGER tr_ins_timetable
+ON timetable AFTER INSERT
+AS
+	--если в расписание добавилась строка с не нулевым полем сотрудника, то
+	--данные о сотруднике и должности надо добавить в emp_spec
+	DECLARE @new_id as integer;
+	SELECT @new_id=MAX(employee_speciality_id) FROM employee_speciality;
+
+	if @new_id is null
+		SET @new_id=0;
+	SET @new_id = @new_id + 1;
+
+	--нужно понять, как правильно указывать главну специальность (trigger on emp_spec?)
+	INSERT INTO employee_speciality(employee_speciality_id, employee_id, speciality_id, is_main_spec, hire_date)
+	SELECT @new_id, t.emp_id, t.spec_id, 0, GETDATE() FROM 
+	(SELECT employee_id as emp_id, speciality_id as spec_id FROM 
+	inserted WHERE employee_id IS NOT NULL) AS t
+GO
+
+GO
+CREATE TRIGGER tr_ins_employee_speciality
+ON employee_speciality AFTER INSERT
+AS
+BEGIN
+	-- если сотрудник появился в таблице впервые, то пусть его первая должность будет основной,
+	-- последующие будут по совместительству
+	DECLARE @spec_num as integer;
+
+	-- (SELECT employee_id FROM inserted)  может ли давать несколько значений?
+
+	SELECT @spec_num = COUNT(*) FROM 
+		employee_speciality WHERE employee_id =
+			(SELECT employee_id FROM inserted);
+	IF @spec_num = 1 
+		UPDATE employee_speciality
+		SET is_main_spec = 1
+		WHERE employee_id = (SELECT employee_id FROM inserted);
+END;
+GO
+
+GO
+CREATE TRIGGER tr_del_employee_speciality
+ON employee_speciality AFTER DELETE
+AS
+BEGIN
+	-- если удалили главную должность сотрудника, то сделать главной должностью одну из по-совместительству
+	--как быть если удалили больше одной строки?
+	--пройти все строки по одной с помощью курсора?
+
+	DECLARE @emp_id integer, @is_main_spec integer;
+
+	DECLARE my_cursor CURSOR
+	FOR SELECT employee_id, is_main_spec
+	FROM deleted;
+
+	OPEN my_cursor;
+
+	FETCH NEXT FROM my_cursor INTO @emp_id, @is_main_spec;
+
+	WHILE @@FETCH_STATUS=0
+	begin
+		IF @is_main_spec = 1
+		begin
+			DECLARE @spec_num as integer;
+			SELECT @spec_num = COUNT(speciality_id) FROM 
+			employee_speciality WHERE employee_id = @emp_id;
+
+			IF @spec_num >= 1
+			begin
+				--значит изначально у сотрудника было хотя бы 2 должности, значит была по-совместительству
+				UPDATE employee_speciality
+				SET is_main_spec = 1
+				FROM (SELECT TOP 1 * FROM employee_speciality WHERE employee_id = @emp_id) as selected
+				WHERE employee_speciality.employee_speciality_id = selected.employee_speciality_id;	
+			end
+		end
+
+		FETCH NEXT FROM my_cursor INTO @emp_id, @is_main_spec;
+	end;
+
+	CLOSE my_cursor;
+	DEALLOCATE my_cursor;
+END;
+GO
+
+
+
+-- ВЫЗОВЫ ПРОЦЕДУР
+GO
+EXEC add_course 'Основы финансовой грамотности';
+EXEC add_course 'Технический английский язык';
+
+EXEC add_speciality @name='Тестировщик UI', @salary=45000;
+EXEC add_speciality @name='Python разработчик', @salary=60000;
+EXEC add_speciality @name='Специалист по ПЛИС', @salary=55000;
+
+EXEC add_employee @full_name='Фаст Никита', @main_speciality='2', @education='Программная инженерия СПБГУ';
+EXEC add_employee @full_name='Кривоногов Александр', @main_speciality='3', @education='ЛЭТИ';
+SELECT * FROM employee;
+
+EXEC add_passed_course 1, 1, '2022-12-19';
+EXEC add_passed_course 2, 1, '2020-05-14';
+EXEC add_passed_course 2, 2;
+
+DECLARE @t1 department_description;
+INSERT INTO @t1 VALUES(1, 1);
+INSERT INTO @t1 VALUES(2, 3);
+INSERT INTO @t1 VALUES(3, 2);
+
+EXEC add_department 'отдел программирования4', @t1;
+
+EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 1;
+EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 2;
+EXEC add_position_to_timetable 1, @speciality_id = 2, @employee_id = 2;
+EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = null;
+
+EXEC fire_employee @emp_id = 2;
+
+GO
+
+
+
 
 
 -------(ЗАПРОСЫ)----------
