@@ -433,8 +433,8 @@ EXEC add_employee @full_name='Кривоногов Александр', @main_sp
 SELECT * FROM employee;
 
 EXEC add_passed_course 1, 1, '2022-12-19';
-EXEC add_passed_course 2, 1, '2020-05-14';
-EXEC add_passed_course 2, 2;
+EXEC add_passed_course 4, 1, '2020-05-14';
+EXEC add_passed_course 4, 2;
 
 DECLARE @t1 department_description;
 INSERT INTO @t1 VALUES(1, 1);
@@ -458,7 +458,7 @@ VALUES
 (1, 2, 75),
 (2, 2, 350)
 
--- ПОЛУЧИТЬ СТАЖ ВСЕХ СОТРУДНИКОВ В ДНЯХ
+--#1 ПОЛУЧИТЬ СТАЖ ВСЕХ СОТРУДНИКОВ В ДНЯХ
 -- GETDATE() заменить на CAST('2022-12-31' as DATE) для быстрого теста
 
 SELECT t1.employee_id, t1.days + t2.days as work_expirience_in_days
@@ -494,6 +494,15 @@ ON t1.employee_id=t2.employee_id
 --GROUP BY e.employee_id
 --;
 
+--#2 ПОДСЧИТАТЬ ЗАРПЛАТУ ВСЕХ СОТРУДНИКОВ
+
+--#3 ЧИСЛО КУРСОВ ПРОЙДЕННЫХ СОТРУДНИКАМИ ЗА ПОСЛЕДНИЕ 6 МЕСЯЦЕВ
+SELECT e.full_name, COUNT(*) as courses_passed FROM emp_course as ec
+JOIN employee as e ON ec.employee_id = e.employee_id
+WHERE DATEDIFF(MONTH, ec.pass_date, GETDATE()) < 6
+GROUP BY e.full_name
+ORDER BY courses_passed
+;
 
 
 
