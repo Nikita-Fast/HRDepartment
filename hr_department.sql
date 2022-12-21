@@ -23,9 +23,9 @@ create table speciality(
 create table employee(
     employee_id integer CONSTRAINT employee_pk PRIMARY KEY,
     full_name varchar(50) not null,
-	main_speciality integer not null,
-	expirience integer not null,
-	education varchar(100) not null
+	education varchar(255) not null
+	--main_speciality integer not null,
+	--expirience integer not null,
 );
 
 create table timetable(
@@ -63,11 +63,6 @@ CREATE TABLE work_log(
 
 
  --Добавляем внешние ключи
-alter table employee add constraint FK_employee_speciality
-	FOREIGN KEY (main_speciality)
-	REFERENCES speciality(speciality_id)
-;
-
 alter table timetable add constraint FK_timetable_department
     FOREIGN KEY (department_id)
     REFERENCES department(department_id)
@@ -159,7 +154,6 @@ GO
 GO
 CREATE PROCEDURE add_employee
 @full_name as varchar(255),
-@main_speciality as integer,
 @education as varchar(255),
 @expirience as integer = 0 AS
 BEGIN
@@ -167,11 +161,11 @@ BEGIN
 	SELECT @new_employee_id=MAX(employee_id) FROM employee;
 
 	if @new_employee_id is not null
-		INSERT INTO employee(employee_id, full_name, main_speciality, expirience, education)
-		VALUES(@new_employee_id + 1, @full_name, @main_speciality, @expirience, @education);
+		INSERT INTO employee(employee_id, full_name, education)
+		VALUES(@new_employee_id + 1, @full_name, @education);
 	else
-		INSERT INTO employee(employee_id, full_name, main_speciality, expirience, education)
-		VALUES(1, @full_name, @main_speciality, @expirience, @education);
+		INSERT INTO employee(employee_id, full_name, education)
+		VALUES(1, @full_name, @education);
 END;
 GO
 
@@ -268,6 +262,30 @@ END;
 GO
 
 
+--GO
+--CREATE PROCEDURE assign_work_to_emp
+--@dep_id integer,
+--@spec_id integer,
+--@emp_id integer
+--AS
+--BEGIN
+--	DECLARE @vacant_num integer;
+
+--	SELECT @vacant_num = COUNT(*) FROM timetable 
+--	WHERE department_id = @dep_id AND speciality_id = @spec_id AND employee_id is null
+
+--	if @vacant_num > 0
+--	begin
+--		UPDATE timetable
+--		SET employee_id = @emp_id
+--		WHERE 
+--	end;
+--END;
+
+
+--GO
+
+
 GO
 CREATE VIEW v_timetable(dep_id, dep_name, speciality, emp_name)
 -- ПОКАЗАТЬ ШТАТНОЕ РАСПИСАНИЕ ЦЕЛИКОМ
@@ -291,18 +309,27 @@ JOIN course as c ON c.course_id = emp_course.course_id
 GO
 
 GO
-CREATE VIEW v_employee(emp_name, main_spec_name, salary, expirience)
+CREATE VIEW v_employee_speciality(emp_name, spec_name, hire_date, is_main_spec)
 AS
-SELECT e.full_name, s.name, s.salary, e.expirience
-FROM employee as e
-JOIN speciality s ON e.main_speciality = s.speciality_id
+SELECT e.full_name, s.name, hire_date, is_main_spec FROM employee_speciality as es
+JOIN employee as e ON e.employee_id = es.employee_id
+JOIN speciality as s ON s.speciality_id = es.speciality_id
 ;
 GO
 
+GO
+CREATE VIEW v_work_log(emp_name, spec_name, days_worked)
+AS
+SELECT e.full_name, s.name, wl.days_of_work FROM work_log as wl
+JOIN employee as e ON e.employee_id = wl.emp_id
+JOIN speciality as s ON s.speciality_id = wl.spec_id
+;
+GO
 
 --SELECT * FROM v_timetable ORDER BY speciality;
 --SELECT * FROM v_emp_course ORDER BY pass_date, emp_name;
---SELECT * FROM v_employee ORDER BY emp_name;
+--SELECT * FROM v_employee_speciality ORDER BY emp_name;
+--SELECT * FROM v_work_log ORDER BY emp_name;
 
 
 -------TRIGGERS--------------
@@ -423,40 +450,81 @@ GO
 GO
 EXEC add_course 'Основы финансовой грамотности';
 EXEC add_course 'Технический английский язык';
+EXEC add_course 'Лекции по MS SQL SERVER';
+EXEC add_course 'Теория веротяностей для чайников';
+EXEC add_course 'Deadline или как успеть то, что нужно было закончить вчера';
+EXEC add_course 'Time managment для всех';
 
 EXEC add_speciality @name='Тестировщик UI', @salary=45000;
 EXEC add_speciality @name='Python разработчик', @salary=60000;
 EXEC add_speciality @name='Специалист по ПЛИС', @salary=55000;
+EXEC add_speciality @name='Начальник отдела программирования', @salary=95000;
+EXEC add_speciality @name='менеджер', @salary=60000;
+EXEC add_speciality @name='Руководитель отдела кадров', @salary=75000;
+EXEC add_speciality @name='Специалсит отдела кадров', @salary=50000;
+EXEC add_speciality @name='Специалист по тестировнию', @salary=80000;
 
-EXEC add_employee @full_name='Фаст Никита', @main_speciality='2', @education='Программная инженерия СПБГУ';
-EXEC add_employee @full_name='Кривоногов Александр', @main_speciality='3', @education='ЛЭТИ';
-SELECT * FROM employee;
+EXEC add_employee @full_name='Фаст Никита', @education='Программная инженерия СПБГУ';
+EXEC add_employee @full_name='Кривоногов Александр', @education='ЛЭТИ';
+EXEC add_employee @full_name='Абрамова Дарья', @education='ПетрГУ';
+EXEC add_employee @full_name='Мармеладова Соня', @education='ИТМО';
+EXEC add_employee @full_name='Прохоров Генадий', @education='МТУСИ';
+EXEC add_employee @full_name='Тереньтьев Александр', @education='ГПТУ';
+EXEC add_employee @full_name='Петренко Сергей', @education='МАИ';
+EXEC add_employee @full_name='Кочерыгина Евгения', @education='МГУ';
 
 EXEC add_passed_course 1, 1, '2022-12-19';
-EXEC add_passed_course 4, 1, '2020-05-14';
-EXEC add_passed_course 4, 2;
+EXEC add_passed_course 1, 3, '2022-12-01';
+EXEC add_passed_course 1, 5, '2021-05-12';
+
+EXEC add_passed_course 2, 1, '2017-01-29';
+EXEC add_passed_course 2, 2, '2020-11-23';
+EXEC add_passed_course 2, 6, '2016-03-13';
+
+EXEC add_passed_course 3, 5, '2021-05-12';
+
+EXEC add_passed_course 6, 4, '2015-08-09';
+
+EXEC add_passed_course 7, 3, '2012-08-19';
+EXEC add_passed_course 7, 4, '2015-08-09';
 
 DECLARE @t1 department_description;
-INSERT INTO @t1 VALUES(1, 1);
-INSERT INTO @t1 VALUES(2, 3);
+INSERT INTO @t1 VALUES(4, 1);
+INSERT INTO @t1 VALUES(5, 1);
 INSERT INTO @t1 VALUES(3, 2);
+INSERT INTO @t1 VALUES(3, 3);
+EXEC add_department 'отдел программирования', @t1;
 
-EXEC add_department 'отдел программирования4', @t1;
+DECLARE @t2 department_description;
+INSERT INTO @t2 VALUES(6, 1);
+INSERT INTO @t2 VALUES(7, 2);
+EXEC add_department 'отдел кадров', @t2;
 
-EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 1;
-EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 2;
-EXEC add_position_to_timetable 1, @speciality_id = 2, @employee_id = 2;
-EXEC add_position_to_timetable 1, @speciality_id = 2, @employee_id = 4;
+DECLARE @t3 department_description;
+INSERT INTO @t2 VALUES(8, 2);
+INSERT INTO @t2 VALUES(1, 1);
+EXEC add_department 'отдел тестирования', @t3;
 
-EXEC fire_employee @emp_id = 3;
-
-GO
-
+-- заполняем трудовую историю сотрудников
 INSERT INTO work_log(emp_id, spec_id, days_of_work)
 VALUES 
-(1, 1, 25),
-(1, 2, 75),
-(2, 2, 350)
+(1, 1, 60),
+(2, 2, 1350),
+(2, 4, 590),
+(2, 8, 700),
+(3, 1, 250),
+(4, 7, 900),
+(5, 5, 300),
+(5, 2, 300),
+(6, 3, 220),
+(7, 1, 1200),
+(7, 8, 2600),
+(8, 7, 540),
+(8, 6, 1350)
+
+--EXEC fire_employee @emp_id = 4;
+
+GO
 
 --#1 ПОЛУЧИТЬ СТАЖ ВСЕХ СОТРУДНИКОВ В ДНЯХ
 -- GETDATE() заменить на CAST('2022-12-31' as DATE) для быстрого теста
