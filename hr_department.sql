@@ -582,7 +582,7 @@ ON t1.employee_id=t2.employee_id
 	SELECT 
 		e.employee_id, 
 		e.full_name, 
-		SUM(case when es.speciality_id is null then 0 else 1 end) as cnt
+		SUM(case when es.speciality_id is null then 0 else 1 end) as jobs
 	FROM employee_speciality as es
 	RIGHT JOIN employee as e ON e.employee_id = es.employee_id
 	GROUP BY e.employee_id, e.full_name
@@ -598,41 +598,90 @@ GROUP BY e.full_name
 ORDER BY courses_passed
 ;
 
---#4 ПОДСЧИТАТЬ ЗАРПЛАТУ ВСЕХ СОТРУДНИКОВ
+--#4 ПОДСЧИТАТЬ ЗАРПЛАТУ РАБОТАЮЩИХ СОТРУДНИКОВ
+SELECT e.employee_id, e.full_name, SUM(ISNULL(s.salary, 0)) as salary FROM employee_speciality as es
+JOIN employee as e ON e.employee_id = es.employee_id
+JOIN speciality as s ON s.speciality_id = es.speciality_id
+GROUP BY e.employee_id, e.full_name
+ORDER BY e.employee_id
+;
 
--------(ЗАПРОСЫ)----------
--- ПОЛУЧИТЬ ПЕРЕЧЕНЬ СОТРУДНИКОВ ОТДЕЛА 
---SELECT DISTINCT d.name, e.full_name FROM 
---timetable as t 
---JOIN department as d ON d.department_id = t.department_id
---JOIN employee as e ON e.employee_id = t.employee_id
---;
+--#5 ПОЛУЧИТЬ ПЕРЕЧЕНЬ СОТРУДНИКОВ ДЛЯ КАЖДОГО ОТДЕЛА 
+SELECT DISTINCT d.department_id, d.name, e.full_name, e.employee_id FROM 
+timetable as t 
+JOIN department as d ON d.department_id = t.department_id
+JOIN employee as e ON e.employee_id = t.employee_id
+ORDER BY d.department_id
+;
 
----- ПОЛУЧИТЬ ЗАНИМАЕМЫЕ СОТРУДНИКОМ ДОЛЖНОСТИ
---SELECT e.full_name, s.name FROM
---timetable as t
---JOIN employee as e ON e.employee_id = t.employee_id
---JOIN speciality as s ON s.speciality_id = t.speciality_id
---ORDER BY e.full_name
---;
+--#6 ПОЛУЧИТЬ ЗАНИМАЕМЫЕ СОТРУДНИКАМИ ДОЛЖНОСТИ
+SELECT e.employee_id, e.full_name, s.name FROM
+timetable as t
+JOIN employee as e ON e.employee_id = t.employee_id
+JOIN speciality as s ON s.speciality_id = t.speciality_id
+ORDER BY e.employee_id
+;
 
----- основная специальность сотрудников
---SELECT e.full_name, s.name FROM 
---timetable as t
---JOIN employee as e ON e.employee_id = t.employee_id
---JOIN speciality as s ON e.main_speciality = s.speciality_id
---ORDER BY e.full_name, s.name
---;
+--#7 ПОЛУЧИТЬ ОСНОВНЫЕ ДОЛЖНОСТИ СОТРУДНИКОВ
+SELECT e.employee_id, e.full_name, s.name FROM employee_speciality as es
+JOIN speciality as s ON s.speciality_id = es.speciality_id
+JOIN employee as e ON e.employee_id = es.employee_id
+WHERE es.is_main_spec = 1
+ORDER BY e.employee_id
+;
 
+-- #8.1 количество сотрудников на каждой должности в каждом отделе
+SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
+timetable as t
+JOIN department as d ON d.department_id = t.department_id
+JOIN speciality as s ON s.speciality_id = t.speciality_id
+GROUP BY d.department_id, d.name, s.name
+ORDER BY d.department_id, spec_name
+;
 
----- количество сотрудников на каждой должности в каждом отделе
---SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
---timetable as t
---JOIN department as d ON d.department_id = t.department_id
---JOIN speciality as s ON s.speciality_id = t.speciality_id
---GROUP BY d.department_id, d.name, s.name
---ORDER BY d.department_id, spec_name
---;
+-- #8.2 требуемое количество сотрудников на каждой должности в каждом отделе
+SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as required_emp_num FROM 
+timetable as t
+JOIN department as d ON d.department_id = t.department_id
+JOIN speciality as s ON s.speciality_id = t.speciality_id
+GROUP BY d.department_id, d.name, s.name
+ORDER BY d.department_id, spec_name
+;
+
+-- #8.3 ПОЛУЧИТЬ КОЛИЧЕСТВО ВАКАНТНЫХ МЕСТ ПО КАЖДОЙ ДОЛЖНОСТИ В КАЖДОМ ОТДЕЛЕ
+SELECT 
+	t1.department_id,
+	t1.dep_name,
+	t1.speciality_id,
+	t1.spec_name,
+	t2.required_emp_num - t1.emp_num as vacancies
+	FROM 
+(
+	SELECT 
+		d.department_id, 
+		d.name as dep_name, 
+		s.speciality_id, 
+		s.name as spec_name, 
+		COUNT(t.employee_id) as emp_num FROM 
+	timetable as t
+	JOIN department as d ON d.department_id = t.department_id
+	JOIN speciality as s ON s.speciality_id = t.speciality_id
+	GROUP BY d.department_id, d.name, s.speciality_id, s.name
+) as t1 JOIN 
+(
+	SELECT 
+		d.department_id, 
+		d.name as dep_name, 
+		s.speciality_id, 
+		s.name as spec_name,
+		COUNT(*) as required_emp_num FROM 
+	timetable as t
+	JOIN department as d ON d.department_id = t.department_id
+	JOIN speciality as s ON s.speciality_id = t.speciality_id
+	GROUP BY d.department_id, d.name, s.speciality_id, s.name
+) as t2 ON t1.department_id = t2.department_id AND t1.speciality_id = t2.speciality_id
+ORDER BY department_id
+;
 
 --GO
 --CREATE FUNCTION get_emp_num()
@@ -649,40 +698,7 @@ ORDER BY courses_passed
 --GO
 
 
----- требуемое количество сотрудников на каждой должности в каждом отделе
---SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as required_emp_num FROM 
---timetable as t
---JOIN department as d ON d.department_id = t.department_id
---JOIN speciality as s ON s.speciality_id = t.speciality_id
---GROUP BY d.department_id, d.name, s.name
---ORDER BY d.department_id, spec_name
---;
 
---GO
---CREATE FUNCTION get_req_emp_num()
---RETURNS TABLE
---AS
---RETURN(
---	SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as req_emp_num FROM 
---	timetable as t
---	JOIN department as d ON d.department_id = t.department_id
---	JOIN speciality as s ON s.speciality_id = t.speciality_id
---	GROUP BY d.department_id, d.name, s.name
---)
---;
---GO
-
-
----- ПОЛУЧИТЬ КОЛИЧЕСТВО ВАКАНТНЫХ МЕСТ
---SELECT	a.department_id as dep_id, 
---		a.dep_name, 
---		a.spec_name, 
---		a.req_emp_num - b.emp_num as vakant 
---FROM 
---get_req_emp_num() as a 
---JOIN get_emp_num() as b ON 
---a.department_id=b.department_id and a.spec_name=b.spec_name
---;
 
 --DROP TABLE work_log;
 --DROP TABLE employee_speciality;
