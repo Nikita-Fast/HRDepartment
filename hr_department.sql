@@ -224,7 +224,9 @@ EXEC add_employee @full_name='Фаст Никита', @main_speciality='2', @edu
 EXEC add_employee @full_name='Кривоногов Александр', @main_speciality='3', @education='ЛЭТИ';
 SELECT * FROM employee;
 
---EXEC add_passed_course 1, 1
+EXEC add_passed_course 1, 1, '2022-12-19'
+EXEC add_passed_course 2, 1, '2020-05-14'
+EXEC add_passed_course 2, 2
 
 DECLARE @t1 department_description;
 INSERT INTO @t1 VALUES(1, 1);
@@ -247,7 +249,33 @@ LEFT JOIN employee as e ON e.employee_id = t.employee_id
 ;
 GO
 
+GO
+CREATE VIEW v_emp_course(emp_name, course_name, pass_date)
+AS
+SELECT e.full_name, c.name, emp_course.pass_date 
+FROM emp_course 
+JOIN employee as e ON e.employee_id = emp_course.employee_id
+JOIN course as c ON c.course_id = emp_course.course_id
+;
+GO
+
+GO
+-- emp_name, |dep_id, dep_name, spec_name|, hire_date, exp
+
+CREATE VIEW v_employee(emp_name, main_spec_name, salary, hire_date, expirience)
+AS
+SELECT e.full_name, s.name, s.salary, e.hire_date, e.expirience
+FROM employee as e
+JOIN speciality s ON e.main_speciality = s.speciality_id
+;
+GO
+
+
 SELECT * FROM v_timetable ORDER BY speciality;
+SELECT * FROM v_emp_course ORDER BY pass_date, emp_name;
+SELECT * FROM v_employee ORDER BY emp_name;
+
+--TRUNCATE TABLE emp_course;
 
 
 -------(ЗАПРОСЫ)----------
