@@ -65,11 +65,13 @@ alter table timetable add constraint FK_timetable_speciality
 alter table timetable add constraint FK_timetable_employee
     FOREIGN KEY (employee_id)
     REFERENCES employee(employee_id)
+	ON DELETE CASCADE	
 ;
 
 alter table emp_course add constraint FK_emp_course_employee
    FOREIGN KEY (employee_id)
     REFERENCES employee(employee_id)
+	ON DELETE CASCADE
 ;
 
 alter table emp_course add constraint FK_emp_course_course
@@ -211,6 +213,18 @@ BEGIN
 END;
 GO
 
+GO
+-- УВОЛИТЬ СОТРУДНИКА И УДАЛИТЬ ВСЕ ЗАПИСИ О НЕМ ИЗ БД
+CREATE PROCEDURE fire_employee
+@emp_id integer
+AS
+BEGIN
+	EXEC('DISABLE TRIGGER tr_del_emp_course ON emp_course');
+	DELETE FROM employee WHERE employee_id = @emp_id;
+	EXEC('ENABLE TRIGGER tr_del_emp_course ON emp_course');
+END;
+GO
+
 -- ВЫЗОВЫ ПРОЦЕДУР
 GO
 EXEC add_course 'Основы финансовой грамотности';
@@ -234,6 +248,12 @@ INSERT INTO @t1 VALUES(2, 3);
 INSERT INTO @t1 VALUES(3, 2);
 
 EXEC add_department 'отдел программирования4', @t1;
+
+EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 1;
+EXEC add_position_to_timetable 1, @speciality_id = 1, @employee_id = 2;
+EXEC add_position_to_timetable 1, @speciality_id = 2, @employee_id = 2;
+
+EXEC fire_employee @emp_id = 2;
 
 GO
 
@@ -275,90 +295,108 @@ SELECT * FROM v_timetable ORDER BY speciality;
 SELECT * FROM v_emp_course ORDER BY pass_date, emp_name;
 SELECT * FROM v_employee ORDER BY emp_name;
 
---TRUNCATE TABLE emp_course;
+
+
+-------TRIGGERS--------------
+GO
+-- ЗАПРЕТ НА УДАЛЕНИЕ ЗАПИСЕЙ О ПРОХОЖДЕНИИ СОТРУДНИКАМИ КУРСОВ ПОВЫШЕНИЯ КВАЛИФИКАЦИИ
+CREATE TRIGGER tr_del_emp_course
+ON emp_course FOR DELETE
+AS ROLLBACK
+;
+GO
+
+-- УДАЛИТЬ НЕ ПОЛУЧИТСЯ
+DELETE FROM emp_course WHERE employee_id = 2;
+select * from v_emp_course;
+
+-- УДАЛИТЬ НЕ ПОЛУЧИТСЯ, ХОТЯ И ВКЛЮЧЕНО КАСКАДНОЕ УДАЛЕНИЕ У ТАБЛИЦЫ ССЫЛАЮЩИХСЯ НА employee
+DELETE FROM employee
+WHERE employee_id = 1
+;
 
 
 -------(ЗАПРОСЫ)----------
 -- ПОЛУЧИТЬ ПЕРЕЧЕНЬ СОТРУДНИКОВ ОТДЕЛА 
-SELECT DISTINCT d.name, e.full_name FROM 
-timetable as t 
-JOIN department as d ON d.department_id = t.department_id
-JOIN employee as e ON e.employee_id = t.employee_id
-;
+--SELECT DISTINCT d.name, e.full_name FROM 
+--timetable as t 
+--JOIN department as d ON d.department_id = t.department_id
+--JOIN employee as e ON e.employee_id = t.employee_id
+--;
 
--- ПОЛУЧИТЬ ЗАНИМАЕМЫЕ СОТРУДНИКОМ ДОЛЖНОСТИ
-SELECT e.full_name, s.name FROM
-timetable as t
-JOIN employee as e ON e.employee_id = t.employee_id
-JOIN speciality as s ON s.speciality_id = t.speciality_id
-ORDER BY e.full_name
-;
+---- ПОЛУЧИТЬ ЗАНИМАЕМЫЕ СОТРУДНИКОМ ДОЛЖНОСТИ
+--SELECT e.full_name, s.name FROM
+--timetable as t
+--JOIN employee as e ON e.employee_id = t.employee_id
+--JOIN speciality as s ON s.speciality_id = t.speciality_id
+--ORDER BY e.full_name
+--;
 
--- основная специальность сотрудников
-SELECT e.full_name, s.name FROM 
-timetable as t
-JOIN employee as e ON e.employee_id = t.employee_id
-JOIN speciality as s ON e.main_speciality = s.speciality_id
-ORDER BY e.full_name, s.name
-;
-
-
--- количество сотрудников на каждой должности в каждом отделе
-SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
-timetable as t
-JOIN department as d ON d.department_id = t.department_id
-JOIN speciality as s ON s.speciality_id = t.speciality_id
-GROUP BY d.department_id, d.name, s.name
-ORDER BY d.department_id, spec_name
-;
-
-GO
-CREATE FUNCTION get_emp_num()
-RETURNS TABLE
-AS
-RETURN(
-	SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
-	timetable as t
-	JOIN department as d ON d.department_id = t.department_id
-	JOIN speciality as s ON s.speciality_id = t.speciality_id
-	GROUP BY d.department_id, d.name, s.name
-)
-;
-GO
+---- основная специальность сотрудников
+--SELECT e.full_name, s.name FROM 
+--timetable as t
+--JOIN employee as e ON e.employee_id = t.employee_id
+--JOIN speciality as s ON e.main_speciality = s.speciality_id
+--ORDER BY e.full_name, s.name
+--;
 
 
--- требуемое количество сотрудников на каждой должности в каждом отделе
-SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as required_emp_num FROM 
-timetable as t
-JOIN department as d ON d.department_id = t.department_id
-JOIN speciality as s ON s.speciality_id = t.speciality_id
-GROUP BY d.department_id, d.name, s.name
-ORDER BY d.department_id, spec_name
-;
+---- количество сотрудников на каждой должности в каждом отделе
+--SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
+--timetable as t
+--JOIN department as d ON d.department_id = t.department_id
+--JOIN speciality as s ON s.speciality_id = t.speciality_id
+--GROUP BY d.department_id, d.name, s.name
+--ORDER BY d.department_id, spec_name
+--;
 
-GO
-CREATE FUNCTION get_req_emp_num()
-RETURNS TABLE
-AS
-RETURN(
-	SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as req_emp_num FROM 
-	timetable as t
-	JOIN department as d ON d.department_id = t.department_id
-	JOIN speciality as s ON s.speciality_id = t.speciality_id
-	GROUP BY d.department_id, d.name, s.name
-)
-;
-GO
+--GO
+--CREATE FUNCTION get_emp_num()
+--RETURNS TABLE
+--AS
+--RETURN(
+--	SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
+--	timetable as t
+--	JOIN department as d ON d.department_id = t.department_id
+--	JOIN speciality as s ON s.speciality_id = t.speciality_id
+--	GROUP BY d.department_id, d.name, s.name
+--)
+--;
+--GO
 
 
--- ПОЛУЧИТЬ КОЛИЧЕСТВО ВАКАНТНЫХ МЕСТ
-SELECT	a.department_id as dep_id, 
-		a.dep_name, 
-		a.spec_name, 
-		a.req_emp_num - b.emp_num as vakant 
-FROM 
-get_req_emp_num() as a 
-JOIN get_emp_num() as b ON 
-a.department_id=b.department_id and a.spec_name=b.spec_name
-;
+---- требуемое количество сотрудников на каждой должности в каждом отделе
+--SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as required_emp_num FROM 
+--timetable as t
+--JOIN department as d ON d.department_id = t.department_id
+--JOIN speciality as s ON s.speciality_id = t.speciality_id
+--GROUP BY d.department_id, d.name, s.name
+--ORDER BY d.department_id, spec_name
+--;
+
+--GO
+--CREATE FUNCTION get_req_emp_num()
+--RETURNS TABLE
+--AS
+--RETURN(
+--	SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(*) as req_emp_num FROM 
+--	timetable as t
+--	JOIN department as d ON d.department_id = t.department_id
+--	JOIN speciality as s ON s.speciality_id = t.speciality_id
+--	GROUP BY d.department_id, d.name, s.name
+--)
+--;
+--GO
+
+
+---- ПОЛУЧИТЬ КОЛИЧЕСТВО ВАКАНТНЫХ МЕСТ
+--SELECT	a.department_id as dep_id, 
+--		a.dep_name, 
+--		a.spec_name, 
+--		a.req_emp_num - b.emp_num as vakant 
+--FROM 
+--get_req_emp_num() as a 
+--JOIN get_emp_num() as b ON 
+--a.department_id=b.department_id and a.spec_name=b.spec_name
+--;
 
