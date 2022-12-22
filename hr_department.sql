@@ -11,13 +11,13 @@ USE hr_department
  --Создаем таблицы
 create table department(
     department_id integer CONSTRAINT department_pk PRIMARY KEY,
-    name varchar(50) not null
+    name varchar(50) not null unique
 );
 
 create table speciality(
     speciality_id integer CONSTRAINT speciality_pk PRIMARY KEY,
-    name varchar(50) not null,
-	salary integer not null
+    name varchar(50) not null unique,
+	salary integer not null check(salary >= 16242) -- ЗП не может быть меньше чем МРОТ(16242 руб)
 );
 
 create table employee(
@@ -61,6 +61,9 @@ CREATE TABLE work_log(
 	days_of_work integer not null
 );
 
+CREATE INDEX idx_speciality ON speciality(speciality_id, name);
+CREATE UNIQUE INDEX idx_department ON department(department_id, name);
+CREATE INDEX idx_timetabel ON timetable(department_id, speciality_id);
 
 
  --Добавляем внешние ключи
