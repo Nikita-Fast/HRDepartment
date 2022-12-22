@@ -61,6 +61,7 @@ CREATE TABLE work_log(
 	days_of_work integer not null
 );
 
+-- СОЗДАЕМ ИНДЕКСЫ
 CREATE INDEX idx_speciality ON speciality(speciality_id, name);
 CREATE UNIQUE INDEX idx_department ON department(department_id, name);
 CREATE INDEX idx_timetabel ON timetable(department_id, speciality_id);
@@ -72,7 +73,6 @@ alter table timetable add constraint FK_timetable_department
     REFERENCES department(department_id)
 	ON DELETE CASCADE
 ;
-
 
 alter table timetable add constraint FK_timetable_speciality
     FOREIGN KEY (speciality_id)
@@ -124,7 +124,6 @@ GO
 
 -- ПРОЦЕДУРЫ
 GO
--- курсы могут иметь одинаковые имена, ведь name не является PK
 CREATE PROCEDURE add_course
 @name as varchar(255) AS
 BEGIN
@@ -194,7 +193,7 @@ CREATE PROCEDURE add_position_to_timetable
 @employee_id as integer = null --по умолчанию, сотрудник не назначен на позицию в штатном расписании
 AS
 BEGIN
-	--навесить на timetable триггер после вставки, чтобы в табли emp_spec были добавлены данные
+	--навесить на timetable триггер после вставки, чтобы в таблице emp_spec были добавлены данные
 	--о сотрудниках на должностях
 	DECLARE @id integer;
 	SELECT @id = ISNULL(MAX(id), 0) FROM timetable;
@@ -377,6 +376,22 @@ AS
 	inserted WHERE employee_id IS NOT NULL) AS t
 GO
 
+
+GO
+CREATE TRIGGER tr_del_timetable
+ON timetable AFTER DELETE
+AS
+	INSERT INTO timetable (id, department_id, speciality_id, employee_id)
+	SELECT * FROM deleted
+	WHERE deleted.employee_id IN (SELECT employee_id FROM employee);
+
+	INSERT INTO timetable (id, department_id, speciality_id, employee_id)
+	SELECT id, department_id, speciality_id, null FROM deleted
+	WHERE deleted.employee_id NOT IN (SELECT employee_id FROM employee);
+GO
+
+
+
 GO
 CREATE TRIGGER tr_ins_employee_speciality
 ON employee_speciality AFTER INSERT
@@ -408,7 +423,8 @@ BEGIN
 		employee_id, 
 		speciality_id,
 		DATEDIFF(DAY, hire_date, GETDATE())
-	FROM deleted
+	FROM deleted 
+	WHERE deleted.employee_id IN (SELECT employee_id FROM employee);
 
 
 	-- если удалили главную должность сотрудника, то сделать главной должностью одну из по-совместительству
@@ -540,7 +556,7 @@ EXEC assign_work_to_emp			3,			8,		   4;
 EXEC assign_work_to_emp			3,			8,		   5;
 EXEC assign_work_to_emp			3,			7,		   6;
 
---EXEC fire_employee @emp_id = 4;
+--EXEC fire_employee @emp_id = 2;
 
 GO
 
