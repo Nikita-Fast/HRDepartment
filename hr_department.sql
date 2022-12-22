@@ -3,7 +3,7 @@
 --    - у нескольких сотрудников может быть одинаковая должность(speciality)
 --    - позиция в штатном рапсисании может быть занята максимум одним сотрудником
 
---CREATE DATABASE hr_department;
+CREATE DATABASE hr_department;
 GO
 
 USE hr_department
@@ -294,10 +294,10 @@ END;
 
 
 GO
-CREATE VIEW v_timetable(dep_id, dep_name, speciality, emp_name)
+CREATE VIEW v_timetable(dep_id, dep_name, spec_id, spec_name, emp_id, emp_name)
 -- ПОКАЗАТЬ ШТАТНОЕ РАСПИСАНИЕ ЦЕЛИКОМ
 AS
-SELECT d.department_id, d.name, s.name, e.full_name
+SELECT d.department_id, d.name, s.speciality_id, s.name, e.employee_id, e.full_name
 FROM timetable as t
 JOIN department as d ON d.department_id = t.department_id
 JOIN speciality as s ON s.speciality_id = t.speciality_id
@@ -450,7 +450,7 @@ GO
 
 
 
--- ВЫЗОВЫ ПРОЦЕДУР
+-- ЗАПОЛНЕНИЕ БД ДАННЫМИ
 GO
 EXEC add_course 'Основы финансовой грамотности';
 EXEC add_course 'Технический английский язык';
@@ -537,7 +537,6 @@ EXEC assign_work_to_emp			3,			8,		   4;
 EXEC assign_work_to_emp			3,			8,		   5;
 EXEC assign_work_to_emp			3,			7,		   6;
 
-
 --EXEC fire_employee @emp_id = 4;
 
 GO
@@ -554,7 +553,7 @@ FROM
 ) as t1 
 JOIN 
 (
-	SELECT e.employee_id, SUM( ISNULL( DATEDIFF(DAY, es.hire_date, CAST('2022-12-31' as DATE)) , 0) ) as days 
+	SELECT e.employee_id, SUM( ISNULL( DATEDIFF(DAY, es.hire_date, GETDATE()) , 0) ) as days 
 	FROM employee_speciality as es
 	RIGHT JOIN employee as e ON e.employee_id=es.employee_id
 	GROUP BY e.employee_id
@@ -562,7 +561,32 @@ JOIN
 ON t1.employee_id=t2.employee_id
 ;
 
+GO
+CREATE FUNCTION get_expirience()
+RETURNS TABLE
+AS
+RETURN(
+	SELECT t1.employee_id as emp_id, t1.days + t2.days as work_expirience_in_days
+	FROM 
+	(
+		SELECT e.employee_id, SUM(ISNULL(days_of_work, 0)) as days FROM work_log
+		RIGHT JOIN employee as e ON e.employee_id=work_log.emp_id
+		GROUP BY e.employee_id
+	) as t1 
+	JOIN 
+	(
+		SELECT e.employee_id, SUM( ISNULL( DATEDIFF(DAY, es.hire_date, GETDATE()) , 0) ) as days 
+		FROM employee_speciality as es
+		RIGHT JOIN employee as e ON e.employee_id=es.employee_id
+		GROUP BY e.employee_id
+	) as t2 
+	ON t1.employee_id=t2.employee_id
+)
+;
+GO
+
 ----### ПРЕДЫДЩУИЙ ЗАПРОС СОСТОИТ ИЗ СЛЕДЮУЩИХ ДВУХ
+
 ---- ДЛЯ КАЖДОГО СТРУДНИКА ПОЛУЧИТЬ ЕГО СТАЖ НА ПРОШЛЫХ ДОЛЖНОСТЯХ
 --SELECT e.employee_id, SUM(ISNULL(days_of_work, 0)) as days FROM work_log
 --RIGHT JOIN employee as e ON e.employee_id=work_log.emp_id
@@ -683,21 +707,50 @@ SELECT
 ORDER BY department_id
 ;
 
---GO
---CREATE FUNCTION get_emp_num()
---RETURNS TABLE
---AS
---RETURN(
---	SELECT d.department_id, d.name as dep_name, s.name as spec_name, COUNT(t.employee_id) as emp_num FROM 
---	timetable as t
---	JOIN department as d ON d.department_id = t.department_id
---	JOIN speciality as s ON s.speciality_id = t.speciality_id
---	GROUP BY d.department_id, d.name, s.name
---)
---;
---GO
+-- #9 ДВА САМЫХ ПОПУЛЯРНЫХ КУРСА
+SELECT TOP 2 
+	c.course_id, 
+	c.name, 
+	COUNT(*) as people_passed 
+FROM emp_course as ec
+JOIN course as c ON c.course_id = ec.course_id
+GROUP BY c.course_id, c.name
+HAVING COUNT(*) = (SELECT MAX(s.cnt) FROM (
+SELECT course_id, COUNT(*) as cnt FROM emp_course
+GROUP BY course_id
+) as s)
+ORDER BY course_id
+;
 
+-- #10 ПОДРОБНЫЙ СПИСОК СОТРУДНИКОВ ГДЕ МНОГО МНОГО ВСЕГО
+SELECT 
+	e.employee_id, 
+	e.full_name, 
+	e.education, 
+	c.course_id, 
+	c.name, 
+	es.speciality_id, 
+	exps.work_expirience_in_days, 
+	s.name 
+FROM emp_course as ec
+JOIN employee as e on e.employee_id = ec.employee_id
+JOIN course as c on c.course_id = ec.course_id
+JOIN employee_speciality as es on es.employee_id = ec.employee_id
+JOIN speciality as s on s.speciality_id = es.speciality_id
+JOIN get_expirience() as exps on exps.emp_id = e.employee_id
+;
 
+-- #11 ХОТЬ КАКОЙ-НИБУДЬ UNION
+SELECT * FROM v_timetable WHERE emp_id = 1
+UNION
+SELECT * FROM v_timetable WHERE emp_id IN (2,4,5)
+;
+
+-- #12 НА СКОЛЬКИХ ДОЛЖНОСТЯХ РАНЕЕ РАБОТАЛ СОТРУДНИК?
+SELECT wl.emp_id, e.full_name, COUNT(*) as jobs FROM work_log as wl
+JOIN employee as e on e.employee_id = wl.emp_id
+GROUP BY wl.emp_id, e.full_name
+;
 
 
 --DROP TABLE work_log;
@@ -722,6 +775,8 @@ ORDER BY department_id
 --DROP PROCEDURE add_speciality;
 --DROP PROCEDURE assign_work_to_emp;
 --DROP PROCEDURE fire_employee;
+
+--DROP FUNCTION get_expirience;
 
 --DROP TYPE department_description;
 
