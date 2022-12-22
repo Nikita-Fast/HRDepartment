@@ -157,8 +157,8 @@ GO
 GO
 CREATE PROCEDURE add_employee
 @full_name as varchar(255),
-@education as varchar(255),
-@expirience as integer = 0 AS
+@education as varchar(255)
+AS
 BEGIN
 	DECLARE @new_employee_id as integer;
 	SELECT @new_employee_id=MAX(employee_id) FROM employee;
@@ -239,17 +239,17 @@ BEGIN
 	FETCH NEXT FROM my_cursor INTO @spec_id, @req_emp_num;
 
 	WHILE @@FETCH_STATUS=0
-		begin
-			DECLARE @i integer;
-			SET @i=0
-			WHILE @i < @req_emp_num
-				begin
-					EXEC add_position_to_timetable @new_department_id, @spec_id
-					SET @i = @i + 1
-				end;
+	begin
+		DECLARE @i integer;
+		SET @i=0
+		WHILE @i < @req_emp_num
+			begin
+				EXEC add_position_to_timetable @new_department_id, @spec_id
+				SET @i = @i + 1
+			end;
 
-			FETCH NEXT FROM my_cursor INTO @spec_id, @req_emp_num;
-		end;
+		FETCH NEXT FROM my_cursor INTO @spec_id, @req_emp_num;
+	end;
 
 	CLOSE my_cursor;
 	DEALLOCATE my_cursor;
@@ -308,9 +308,9 @@ LEFT JOIN employee as e ON e.employee_id = t.employee_id
 GO
 
 GO
-CREATE VIEW v_emp_course(emp_name, course_name, pass_date)
+CREATE VIEW v_emp_course(emp_id, emp_name, course_id, course_name, pass_date)
 AS
-SELECT e.full_name, c.name, emp_course.pass_date 
+SELECT e.employee_id, e.full_name, c.course_id, c.name, emp_course.pass_date 
 FROM emp_course 
 JOIN employee as e ON e.employee_id = emp_course.employee_id
 JOIN course as c ON c.course_id = emp_course.course_id
@@ -318,22 +318,45 @@ JOIN course as c ON c.course_id = emp_course.course_id
 GO
 
 GO
-CREATE VIEW v_employee_speciality(emp_name, spec_name, hire_date, is_main_spec)
+CREATE VIEW v_employee_speciality(emp_id, emp_name, spec_id, spec_name, salary, hire_date, is_main_spec)
 AS
-SELECT e.full_name, s.name, hire_date, is_main_spec FROM employee_speciality as es
+SELECT e.employee_id, e.full_name, s.speciality_id, 
+	   s.name, s.salary, hire_date, is_main_spec FROM employee_speciality as es
 JOIN employee as e ON e.employee_id = es.employee_id
 JOIN speciality as s ON s.speciality_id = es.speciality_id
 ;
 GO
 
 GO
-CREATE VIEW v_work_log(emp_name, spec_name, days_worked)
+CREATE VIEW v_work_log(emp_id, emp_name, spec_id, spec_name, days_worked)
 AS
-SELECT e.full_name, s.name, wl.days_of_work FROM work_log as wl
+SELECT e.employee_id, e.full_name, s.speciality_id, s.name, wl.days_of_work FROM work_log as wl
 JOIN employee as e ON e.employee_id = wl.emp_id
 JOIN speciality as s ON s.speciality_id = wl.spec_id
 ;
 GO
+
+--GO
+--CREATE VIEW v_detailed_emp_list(
+--		emp_id, emp_name, education, course_id, course_name, spec_id, expirience, spec_name)
+--AS
+--	SELECT 
+--		e.employee_id, 
+--		e.full_name, 
+--		e.education, 
+--		c.course_id, 
+--		c.name, 
+--		es.speciality_id, 
+--		exps.work_expirience_in_days, 
+--		s.name 
+--	FROM emp_course as ec
+--	JOIN employee as e on e.employee_id = ec.employee_id
+--	JOIN course as c on c.course_id = ec.course_id
+--	JOIN employee_speciality as es on es.employee_id = ec.employee_id
+--	JOIN speciality as s on s.speciality_id = es.speciality_id
+--	JOIN get_expirience() as exps on exps.emp_id = e.employee_id
+--;
+--GO
 
 --SELECT * FROM v_timetable ORDER BY speciality;
 --SELECT * FROM v_emp_course ORDER BY pass_date, emp_name;
@@ -374,6 +397,7 @@ AS
 	SELECT @new_id, t.emp_id, t.spec_id, 0, GETDATE() FROM 
 	(SELECT employee_id as emp_id, speciality_id as spec_id FROM 
 	inserted WHERE employee_id IS NOT NULL) AS t
+;
 GO
 
 
@@ -622,22 +646,22 @@ GO
 --;
 
 --#2 НАЙТИ НАИМЕНЕЕ ЗАНЯТЫХ СОТРУДНИКОВ
-	SELECT 
-		e.employee_id, 
-		e.full_name, 
-		SUM(case when es.speciality_id is null then 0 else 1 end) as jobs
-	FROM employee_speciality as es
-	RIGHT JOIN employee as e ON e.employee_id = es.employee_id
-	GROUP BY e.employee_id, e.full_name
-	HAVING SUM(case when es.speciality_id is null then 0 else 1 end) = 0
-	ORDER BY employee_id
-	;
+
+SELECT 
+	e.employee_id, 
+	e.full_name, 
+	SUM(case when es.speciality_id is null then 0 else 1 end) as jobs
+FROM employee_speciality as es
+RIGHT JOIN employee as e ON e.employee_id = es.employee_id
+GROUP BY e.employee_id, e.full_name
+HAVING SUM(case when es.speciality_id is null then 0 else 1 end) = 0
+ORDER BY employee_id
+;
 
 --#3 ЧИСЛО КУРСОВ ПРОЙДЕННЫХ СОТРУДНИКАМИ ЗА ПОСЛЕДНИЕ 36 МЕСЯЦЕВ
-SELECT e.full_name, COUNT(*) as courses_passed FROM emp_course as ec
-JOIN employee as e ON ec.employee_id = e.employee_id
-WHERE DATEDIFF(MONTH, ec.pass_date, GETDATE()) < 36
-GROUP BY e.full_name
+SELECT emp_name, COUNT(*) as courses_passed FROM v_emp_course
+WHERE DATEDIFF(MONTH, pass_date, GETDATE()) < 36
+GROUP BY emp_name
 ORDER BY courses_passed
 ;
 
@@ -649,12 +673,24 @@ GROUP BY e.employee_id, e.full_name
 ORDER BY e.employee_id
 ;
 
+--???
+SELECT emp_id, emp_name, SUM(ISNULL(salary, 0)) as salary FROM v_employee_speciality
+GROUP BY emp_id, emp_name
+ORDER BY emp_id
+;
+
 --#5 ПОЛУЧИТЬ ПЕРЕЧЕНЬ СОТРУДНИКОВ ДЛЯ КАЖДОГО ОТДЕЛА 
 SELECT DISTINCT d.department_id, d.name, e.full_name, e.employee_id FROM 
 timetable as t 
 JOIN department as d ON d.department_id = t.department_id
 JOIN employee as e ON e.employee_id = t.employee_id
 ORDER BY d.department_id
+;
+
+SELECT distinct dep_id, dep_name, emp_name, emp_id FROM 
+v_timetable
+WHERE emp_id is not null
+ORDER BY dep_id
 ;
 
 --#6 ПОЛУЧИТЬ ЗАНИМАЕМЫЕ СОТРУДНИКАМИ ДОЛЖНОСТИ
@@ -665,12 +701,19 @@ JOIN speciality as s ON s.speciality_id = t.speciality_id
 ORDER BY e.employee_id
 ;
 
+SELECT emp_name, spec_name FROM v_employee_speciality;
+
 --#7 ПОЛУЧИТЬ ОСНОВНЫЕ ДОЛЖНОСТИ СОТРУДНИКОВ
 SELECT e.employee_id, e.full_name, s.name FROM employee_speciality as es
 JOIN speciality as s ON s.speciality_id = es.speciality_id
 JOIN employee as e ON e.employee_id = es.employee_id
 WHERE es.is_main_spec = 1
 ORDER BY e.employee_id
+;
+
+SELECT emp_id, emp_name, spec_name FROM v_employee_speciality
+WHERE is_main_spec = 1
+ORDER BY emp_id
 ;
 
 -- #8.1 количество сотрудников на каждой должности в каждом отделе
@@ -692,48 +735,91 @@ ORDER BY d.department_id, spec_name
 ;
 
 -- #8.3 ПОЛУЧИТЬ КОЛИЧЕСТВО ВАКАНТНЫХ МЕСТ ПО КАЖДОЙ ДОЛЖНОСТИ В КАЖДОМ ОТДЕЛЕ
+--SELECT 
+--	t1.department_id,
+--	t1.dep_name,
+--	t1.speciality_id,
+--	t1.spec_name,
+--	t2.required_emp_num - t1.emp_num as vacancies
+--	FROM 
+--(
+--	SELECT 
+--		d.department_id, 
+--		d.name as dep_name, 
+--		s.speciality_id, 
+--		s.name as spec_name, 
+--		COUNT(t.employee_id) as emp_num FROM 
+--	timetable as t
+--	JOIN department as d ON d.department_id = t.department_id
+--	JOIN speciality as s ON s.speciality_id = t.speciality_id
+--	GROUP BY d.department_id, d.name, s.speciality_id, s.name
+--) as t1 JOIN 
+--(
+--	SELECT 
+--		d.department_id, 
+--		d.name as dep_name, 
+--		s.speciality_id, 
+--		s.name as spec_name,
+--		COUNT(*) as required_emp_num FROM 
+--	timetable as t
+--	JOIN department as d ON d.department_id = t.department_id
+--	JOIN speciality as s ON s.speciality_id = t.speciality_id
+--	GROUP BY d.department_id, d.name, s.speciality_id, s.name
+--) as t2 ON t1.department_id = t2.department_id AND t1.speciality_id = t2.speciality_id
+--ORDER BY department_id
+--;
+
 SELECT 
-	t1.department_id,
+	t1.dep_id,
 	t1.dep_name,
-	t1.speciality_id,
+	t1.spec_id,
 	t1.spec_name,
 	t2.required_emp_num - t1.emp_num as vacancies
 	FROM 
 (
 	SELECT 
-		d.department_id, 
-		d.name as dep_name, 
-		s.speciality_id, 
-		s.name as spec_name, 
-		COUNT(t.employee_id) as emp_num FROM 
-	timetable as t
-	JOIN department as d ON d.department_id = t.department_id
-	JOIN speciality as s ON s.speciality_id = t.speciality_id
-	GROUP BY d.department_id, d.name, s.speciality_id, s.name
+		dep_id, 
+		dep_name, 
+		spec_id, 
+		spec_name, 
+		COUNT(emp_id) as emp_num FROM 
+	v_timetable
+	GROUP BY dep_id, dep_name, spec_id, spec_name
 ) as t1 JOIN 
 (
 	SELECT 
-		d.department_id, 
-		d.name as dep_name, 
-		s.speciality_id, 
-		s.name as spec_name,
+		dep_id, 
+		dep_name, 
+		spec_id, 
+		spec_name,
 		COUNT(*) as required_emp_num FROM 
-	timetable as t
-	JOIN department as d ON d.department_id = t.department_id
-	JOIN speciality as s ON s.speciality_id = t.speciality_id
-	GROUP BY d.department_id, d.name, s.speciality_id, s.name
-) as t2 ON t1.department_id = t2.department_id AND t1.speciality_id = t2.speciality_id
-ORDER BY department_id
+	v_timetable
+	GROUP BY dep_id, dep_name, spec_id, spec_name
+) as t2 ON t1.dep_id = t2.dep_id AND t1.spec_id = t2.spec_id
+ORDER BY dep_id
 ;
 
 -- #9 ДВА САМЫХ ПОПУЛЯРНЫХ КУРСА
-SELECT TOP 2 
-	c.course_id, 
-	c.name, 
+--SELECT TOP 2 
+--	c.course_id, 
+--	c.name, 
+--	COUNT(*) as people_passed 
+--FROM emp_course as ec
+--JOIN course as c ON c.course_id = ec.course_id
+--GROUP BY c.course_id, c.name
+--HAVING COUNT(*) = (SELECT MAX(s.cnt) FROM (
+--SELECT course_id, COUNT(*) as cnt FROM emp_course
+--GROUP BY course_id
+--) as s)
+--ORDER BY course_id
+--;
+
+SELECT TOP 2
+	course_id, 
+	course_name, 
 	COUNT(*) as people_passed 
-FROM emp_course as ec
-JOIN course as c ON c.course_id = ec.course_id
-GROUP BY c.course_id, c.name
+FROM v_emp_course
+GROUP BY course_id, course_name 
 HAVING COUNT(*) = (SELECT MAX(s.cnt) FROM (
 SELECT course_id, COUNT(*) as cnt FROM emp_course
 GROUP BY course_id
@@ -766,9 +852,13 @@ SELECT * FROM v_timetable WHERE emp_id IN (2,4,5)
 ;
 
 -- #12 НА СКОЛЬКИХ ДОЛЖНОСТЯХ РАНЕЕ РАБОТАЛ СОТРУДНИК?
-SELECT wl.emp_id, e.full_name, COUNT(*) as jobs FROM work_log as wl
-JOIN employee as e on e.employee_id = wl.emp_id
-GROUP BY wl.emp_id, e.full_name
+--SELECT wl.emp_id, e.full_name, COUNT(*) as jobs FROM work_log as wl
+--JOIN employee as e on e.employee_id = wl.emp_id
+--GROUP BY wl.emp_id, e.full_name
+--;
+
+SELECT emp_id, emp_name, COUNT(*) as jobs FROM v_work_log
+GROUP BY emp_id, emp_name
 ;
 
 
